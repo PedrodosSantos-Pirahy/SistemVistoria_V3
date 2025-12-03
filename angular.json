@@ -1,52 +1,26 @@
 {
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
-  "cli": {
-    "packageManager": "npm"
-  },
-  "newProjectRoot": "projects",
+  "newProjectRoot": "",
   "projects": {
-    "SistemVistoria": {
+    "app": {
       "projectType": "application",
-      "schematics": {
-        "@schematics/angular:component": {
-          "style": "scss"
-        }
-      },
       "root": "",
-      "sourceRoot": "src",
+      "sourceRoot": "./",
       "prefix": "app",
       "architect": {
         "build": {
           "builder": "@angular/build:application",
           "options": {
-            "browser": "src/main.ts",
-            "tsConfig": "tsconfig.app.json",
-            "inlineStyleLanguage": "scss",
-            "assets": [
-              {
-                "glob": "**/*",
-                "input": "public"
-              }
-            ],
-            "styles": [
-              "src/styles.scss"
-            ]
+            "outputPath": {
+              "base": "./dist",
+              "browser": "."
+            },
+            "browser": "index.tsx",
+            "tsConfig": "tsconfig.json"
           },
           "configurations": {
             "production": {
-              "budgets": [
-                {
-                  "type": "initial",
-                  "maximumWarning": "500kB",
-                  "maximumError": "1MB"
-                },
-                {
-                  "type": "anyComponentStyle",
-                  "maximumWarning": "4kB",
-                  "maximumError": "8kB"
-                }
-              ],
               "outputHashing": "all"
             },
             "development": {
@@ -59,20 +33,23 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "port": 3000
+          },
           "configurations": {
             "production": {
-              "buildTarget": "SistemVistoria:build:production"
+              "buildTarget": "app:build:production"
             },
             "development": {
-              "buildTarget": "SistemVistoria:build:development"
+              "buildTarget": "app:build:development"
             }
           },
           "defaultConfiguration": "development"
-        },
-        "test": {
-          "builder": "@angular/build:unit-test"
         }
       }
     }
+  },
+  "cli": {
+    "analytics": false
   }
 }
