@@ -1,6 +1,9 @@
-import { Component, ChangeDetectionStrategy, signal, OnDestroy, WritableSignal, ViewChild, ElementRef, input, effect, computed } from '@angular/core';
+///ng serve --host 192.168.53.193
+
+import { Component, ChangeDetectionStrategy, signal, OnDestroy, WritableSignal, ViewChild, ElementRef, input, effect, computed, output } from '@angular/core';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
+import { Router } from '@angular/router';
 
 declare var SignaturePad: any;
 
@@ -17,22 +20,41 @@ interface FormStep {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FormComponent implements OnDestroy {
-  
+
   placa = input<string | null>(null);
 
-  @ViewChild('controleQualidadeCanvas') controleQualidadeCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('motoristaCanvas') motoristaCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('vistoriadorCanvas') vistoriadorCanvas?: ElementRef<HTMLCanvasElement>;
+@ViewChild('controleQualidadeCanvas') controleQualidadeCanvas!: ElementRef<HTMLCanvasElement>;
+@ViewChild('motoristaCanvas') motoristaCanvas!: ElementRef<HTMLCanvasElement>;
+@ViewChild('vistoriadorCanvas') vistoriadorCanvas!: ElementRef<HTMLCanvasElement>;
+@ViewChild('fullscreenSignatureCanvas') fullscreenCanvas!: ElementRef<HTMLCanvasElement>;
 
-  private cqPad: any;
-  private motoristaPad: any;
-  private vistoriadorPad: any;
+
+  private padCQ: any = null;
+  private padMotorista: any = null;
+
+
+  private padVistoriador: any = null;
+
+  // Pad fullscreen temporário
+  private fullscreenPad: any = null;
 
   private veiculoSubscription: Subscription | undefined;
 
   readonly form = new FormGroup({
     dadosIniciais: new FormGroup({
-      chegada: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+chegada: new FormControl('', {
+  nonNullable: true,
+  validators: [
+    Validators.required,
+    control => {
+      const value = control.value;
+      if (!value) return null;
+
+      const ano = Number(value.split('-')[0]);
+      return ano > 9999 ? { anoInvalido: true } : null;
+    }
+  ]
+}),
       vistoria: new FormControl({ value: '', disabled: true }, { nonNullable: true, validators: [Validators.required] }),
       fim: new FormControl('', { nonNullable: true }),
       numeroOrdem: new FormControl('', { nonNullable: true }),
@@ -160,70 +182,468 @@ export class FormComponent implements OnDestroy {
   readonly placa3Preview = signal<string | null>(null);
   readonly interior1Preview = signal<string | null>(null);
   readonly interior2Preview = signal<string | null>(null);
+  readonly showToast = signal(false);
+  signatureFor: 'cq' | 'motorista' | 'vistoriador' | null = null;
 
-  constructor() {
-    effect(() => {
-      const currentPlaca = this.placa();
-      if (currentPlaca) {
-        this.form.controls.fotosVistoria.controls.placas.controls.placa1.setValue(currentPlaca);
-      }
-    });
+ /* selectedPlaca() {
+  const placa = this.form.get('fotosVistoria.placas.placa1')?.value;
+  console.log('selectedPlaca:', placa);  // <-- aqui você vê o valor
+  return placa;
+} */
 
-    this.veiculoSubscription = this.form.controls.dadosIniciais.controls.tipoVeiculo.valueChanges.subscribe(value => {
-      this.updateValidators(value);
-    });
+// Sinal ou variável para armazenar a placa selecionada da vistoria
+selectedPlaca: string | null = null;
 
-    effect(() => {
-      if (this.currentStep() === this.totalSteps) {
-        // Timeout to allow canvas elements to be rendered before initializing
-        setTimeout(() => this.initializeSignaturePads(), 0);
-      }
-    });
+// Função chamada quando o usuário seleciona uma vistoria
+onInspectionSelected(inspection: any) {
+  if (!inspection?.placa) return;
+
+  // pega somente a placa após a barra, se houver
+  const placaFormatada = inspection.placa.includes('/')
+    ? inspection.placa.split('/')[1]
+    : inspection.placa;
+
+  this.selectedPlaca = placaFormatada;
+
+  // Opcional: preencher automaticamente no input de placa1
+  this.form.get('fotosVistoria.placas.placa1')?.setValue(placaFormatada, { emitEvent: false });
+
+  console.log('Placa selecionada para vistoria:', placaFormatada);
+}
+
+// Função do mini botão “copiar para input”
+copySelectedPlacaToInput() {
+  if (!this.selectedPlaca) return;
+
+  this.form.get('fotosVistoria.placas.placa1')?.setValue(this.selectedPlaca);
+}
+
+
+
+updatePlaca(placaDoBanco: string) {
+  if (!placaDoBanco) return;
+
+  // Formata a placa caso tenha barra
+  const placaFormatada = placaDoBanco.includes('/')
+    ? placaDoBanco.split('/')[1]
+    : placaDoBanco;
+
+  // Atualiza o FormControl
+  this.form.get('fotosVistoria.placas.placa1')?.setValue(placaFormatada, { emitEvent: false });
+
+  console.log('Placa atualizada no formulário:', placaFormatada);
+}
+
+
+constructor(private router: Router) {
+  // Efeito para atualizar a placa
+ /* effect(() => {
+    const currentPlaca = this.placa();
+    if (currentPlaca) {
+      const placaFormatada = currentPlaca.includes('/')
+        ? currentPlaca.split('/')[1]
+        : currentPlaca;
+
+      this.form.controls.fotosVistoria.controls.placas.controls.placa1.setValue(placaFormatada);
+    }
+  });*/
+
+  // Subscrição para validar tipo de veículo
+  this.veiculoSubscription = this.form.controls.dadosIniciais.controls.tipoVeiculo.valueChanges.subscribe(value => {
+    this.updateValidators(value);
+  });
+
+  
+}
+
+
+  formatarPlaca(event: any) {
+  let value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  if (value.length > 3) {
+    value = value.slice(0, 3) + "-" + value.slice(3);
   }
+
+  if (value.length > 8) {
+    value = value.slice(0, 8); // Limita AAA-1A11 / AAA-1111
+  }
+
+  event.target.value = value;
+}
+toDatetimeLocalWithSeconds(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+       + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
 
   ngOnDestroy(): void {
     this.veiculoSubscription?.unsubscribe();
   }
 
-  private initializeSignaturePads(): void {
-    if (!this.controleQualidadeCanvas || !this.motoristaCanvas || !this.vistoriadorCanvas) return;
 
-    const options = {
-        penColor: 'black',
-        backgroundColor: 'rgb(249 250 251)', // bg-gray-50
-    };
-    
-    this.cqPad = new SignaturePad(this.controleQualidadeCanvas.nativeElement, options);
-    this.motoristaPad = new SignaturePad(this.motoristaCanvas.nativeElement, options);
-    this.vistoriadorPad = new SignaturePad(this.vistoriadorCanvas.nativeElement, options);
+ // Estado
+ showSignatureFullscreen = signal(false);
+ 
 
-    this.cqPad.addEventListener("endStroke", () => {
-        this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(this.cqPad.toDataURL());
-    });
-    this.motoristaPad.addEventListener("endStroke", () => {
-        this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(this.motoristaPad.toDataURL());
-    });
-    this.vistoriadorPad.addEventListener("endStroke", () => {
-        this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(this.vistoriadorPad.toDataURL());
-    });
+  activePad: 'cq' | 'motorista' | 'vistoriador' | null = null;
+  activeCanvas: HTMLCanvasElement | null = null;
+  signaturePreview: string | null = null;
+
+  ngAfterViewInit(): void {
+    // Inicializa os pads dos canvases que aparecem no formulário para que
+    // já estejam prontos na primeira tentativa de assinatura.
+    // Uso de setTimeout dá tempo pro Angular renderizar os canvases.
+    setTimeout(() => this.inicializarPadsPrincipais(), 150);
   }
 
-  limparAssinatura(pad: 'cq' | 'motorista' | 'vistoriador'): void {
-    switch(pad) {
-        case 'cq':
-            this.cqPad?.clear();
-            this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue('');
-            break;
-        case 'motorista':
-            this.motoristaPad?.clear();
-            this.form.controls.finalizacao.controls.motoristaAssinatura.setValue('');
-            break;
-        case 'vistoriador':
-            this.vistoriadorPad?.clear();
-            this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue('');
-            break;
+  getSavedSignature(which: 'cq' | 'motorista' | 'vistoriador') {
+  if (which === 'cq') {
+    return this.form.controls.finalizacao.controls.controleQualidadeAssinatura.value;
+  }
+  if (which === 'motorista') {
+    return this.form.controls.finalizacao.controls.motoristaAssinatura.value;
+  }
+  if (which === 'vistoriador') {
+    return this.form.controls.finalizacao.controls.vistoriadorAssinatura.value;
+  }
+  return null;
+}
+
+private triggerToast(duration = 3000) {
+  this.showToast.set(true);
+  setTimeout(() => this.showToast.set(false), duration);
+}
+saveSignature() {
+  if (!this.fullscreenPad || this.fullscreenPad.isEmpty()) return;
+
+const dataURL = this.fullscreenPad.toDataURL();
+
+  if (this.signatureFor === 'cq') {
+    this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
+  }
+  if (this.signatureFor === 'motorista') {
+    this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
+  }
+  if (this.signatureFor === 'vistoriador') {
+    this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
+  }
+
+  if (dataURL) {
+    alert('Assinatura salva! Pode fechar esta tela.');
+  }
+   
+}
+
+
+  private inicializarPadsPrincipais(): void {
+    try {
+      if (this.controleQualidadeCanvas?.nativeElement) {
+        this.padCQ = new SignaturePad(this.controleQualidadeCanvas.nativeElement, {
+          backgroundColor: 'white',
+          penColor: 'black'
+        });
+        this.padCQ.clear();
+      }
+
+      if (this.motoristaCanvas?.nativeElement) {
+        this.padMotorista = new SignaturePad(this.motoristaCanvas.nativeElement, {
+          backgroundColor: 'white',
+          penColor: 'black'
+        });
+        this.padMotorista.clear();
+      }
+
+      if (this.vistoriadorCanvas?.nativeElement) {
+        this.padVistoriador = new SignaturePad(this.vistoriadorCanvas.nativeElement, {
+          backgroundColor: 'white',
+          penColor: 'black'
+        });
+        this.padVistoriador.clear();
+      }
+    } catch (e) {
+      console.warn('Erro ao inicializar pads principais:', e);
     }
   }
+
+  // Abre o canvas fullscreen para assinar
+openSignatureFullscreen(which: 'cq' | 'motorista' | 'vistoriador') {
+  this.signatureFor = which;
+  this.activePad = which;
+
+  const container = document.getElementById('signatureFullscreen');
+  if (container) {
+    container.classList.remove('hidden'); // MOSTRA o modal
+  }
+
+  // aguarda o DOM renderizar
+  setTimeout(() => {
+    const canvas = this.fullscreenCanvas.nativeElement;
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+
+    this.fullscreenPad = new SignaturePad(canvas, {
+      minWidth: 1,
+      maxWidth: 2,
+      penColor: "black",
+    });
+
+    const saved = this.getSavedSignature(which);
+    if (saved) {
+      this.fullscreenPad.fromDataURL(saved);
+    }
+  }, 50);
+}
+
+
+
+  // Gera preview imediado e salva no FormControl correspondente
+  updatePreview() {
+    if (!this.fullscreenPad || this.fullscreenPad.isEmpty()) return;
+
+    const dataURL = this.fullscreenPad.toDataURL();
+    this.signaturePreview = dataURL;
+
+    try {
+      if (this.activePad === 'cq') {
+        // desenha no pad pequeno para visual imediato
+        if (this.padCQ && typeof this.padCQ.fromDataURL === 'function') {
+          this.padCQ.clear();
+          this.padCQ.fromDataURL(dataURL);
+        } else if (this.activeCanvas) {
+          this.drawImageOnCanvas(this.activeCanvas, dataURL);
+        }
+        this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
+      } else if (this.activePad === 'motorista') {
+        if (this.padMotorista && typeof this.padMotorista.fromDataURL === 'function') {
+          this.padMotorista.clear();
+          this.padMotorista.fromDataURL(dataURL);
+        } else if (this.activeCanvas) {
+          this.drawImageOnCanvas(this.activeCanvas, dataURL);
+        }
+        this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
+      } else if (this.activePad === 'vistoriador') {
+        if (this.padVistoriador && typeof this.padVistoriador.fromDataURL === 'function') {
+          this.padVistoriador.clear();
+          this.padVistoriador.fromDataURL(dataURL);
+        } else if (this.activeCanvas) {
+          this.drawImageOnCanvas(this.activeCanvas, dataURL);
+        }
+        this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
+      }
+    } catch (e) {
+      console.error('Erro ao gerar preview:', e);
+    }
+  }
+
+  // Utilitário para desenhar uma dataURL num canvas nativo
+  private drawImageOnCanvas(target: HTMLCanvasElement, dataURL: string, callback?: () => void) {
+  const img = new Image();
+  img.src = dataURL;
+  img.onload = () => {
+    const displayW = target.offsetWidth;
+    const displayH = target.offsetHeight;
+    const ratio = Math.max(window.devicePixelRatio || 1, 1);
+    target.width = Math.floor(displayW * ratio);
+    target.height = Math.floor(displayH * ratio);
+    target.style.width = `${displayW}px`;
+    target.style.height = `${displayH}px`;
+
+    const ctx = target.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(ratio, ratio);
+    ctx.clearRect(0, 0, displayW, displayH);
+    ctx.drawImage(img, 0, 0, displayW, displayH);
+
+    if (callback) callback();
+  };
+}
+
+  renderSignatureToCanvas(canvas: HTMLCanvasElement | null, dataURL: string) {
+  if (!canvas) {
+    setTimeout(() => this.renderSignatureToCanvas(canvas, dataURL), 50);
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    setTimeout(() => this.renderSignatureToCanvas(canvas, dataURL), 50);
+    return;
+  }
+
+  const img = new Image();
+  img.src = dataURL;
+
+  img.onload = () => {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  };
+}
+
+
+  // Fecha o fullscreen e garante que a assinatura foi salva no canvas pequeno
+// fechar fullscreen — aceita param opcional
+async closeSignatureFullscreen(pad?: 'cq' | 'motorista' | 'vistoriador') {
+  const container = document.getElementById('signatureFullscreen') as HTMLElement | null;
+  // determina qual pad usar: argumento > estado interno
+  const effectivePad = pad ?? this.activePad;
+
+  // se não há pad e não há fullscreenPad, só fecha o fullscreen e limpa estado
+  if (!container || !this.fullscreenPad) {
+    try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+    container?.classList.add('hidden');
+    this.fullscreenPad = null;
+    this.activePad = null;
+    this.activeCanvas = null;
+    return;
+  }
+
+  // Se ainda não sabemos qual pad usar, tenta usar activePad
+  if (!effectivePad) {
+    // só fecha e limpa
+    try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+    container.classList.add('hidden');
+    this.fullscreenPad = null;
+    this.activePad = null;
+    this.activeCanvas = null;
+    return;
+  }
+
+  // resolve control & canvas com base no pad efetivo
+  let control: FormControl<string>;
+  let targetCanvas: HTMLCanvasElement | null = null;
+
+  switch (effectivePad) {
+    case 'cq':
+      control = this.form.controls.finalizacao.controls.controleQualidadeAssinatura;
+      targetCanvas = this.controleQualidadeCanvas?.nativeElement ?? null;
+      break;
+    case 'motorista':
+      control = this.form.controls.finalizacao.controls.motoristaAssinatura;
+      targetCanvas = this.motoristaCanvas?.nativeElement ?? null;
+      break;
+    case 'vistoriador':
+    default:
+      control = this.form.controls.finalizacao.controls.vistoriadorAssinatura;
+      targetCanvas = this.vistoriadorCanvas?.nativeElement ?? null;
+      break;
+  }
+
+  // se houver desenho, garante que foi salvo (updatePreview normalmente já fez isso)
+  try {
+    if (!this.fullscreenPad.isEmpty()) {
+      const dataURL = this.fullscreenPad.toDataURL();
+      control.setValue(dataURL);
+      if (targetCanvas) this.drawImageOnCanvas(targetCanvas, dataURL);
+    }
+  } catch (e) {
+    console.error('Erro ao copiar assinatura:', e);
+  }
+
+  // fecha fullscreen
+  try { if (document.fullscreenElement) await document.exitFullscreen(); } catch {}
+
+  // limpa pad fullscreen
+  try { this.fullscreenPad.clear(); } catch (_) {}
+  this.fullscreenPad = null;
+  this.activePad = null;
+  this.activeCanvas = null;
+  container.classList.add('hidden');
+}
+
+clearSignature() {
+  if (this.fullscreenPad) {
+    this.fullscreenPad.clear();
+  }
+}
+
+  // Limpar assinatura — tanto do pad pequeno quanto do fullscreen (se presente)
+  limparAssinatura(which: 'cq' | 'motorista' | 'vistoriador') {
+    // limpa fullscreen também se estiver ativo
+    try { this.fullscreenPad?.clear(); } catch (_) {}
+
+    if (which === 'cq') {
+      try { this.padCQ?.clear(); } catch (_) {}
+      this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue('');
+    } else if (which === 'motorista') {
+      try { this.padMotorista?.clear(); } catch (_) {}
+      this.form.controls.finalizacao.controls.motoristaAssinatura.setValue('');
+    } else if (which === 'vistoriador') {
+      try { this.padVistoriador?.clear(); } catch (_) {}
+      this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue('');
+    }
+
+    this.signaturePreview = null;
+  }
+private getTargetCanvas(which: 'cq' | 'motorista' | 'vistoriador'): HTMLCanvasElement | null {
+  switch (which) {
+    case 'cq': return this.controleQualidadeCanvas?.nativeElement ?? null;
+    case 'motorista': return this.motoristaCanvas?.nativeElement ?? null;
+    case 'vistoriador': return this.vistoriadorCanvas?.nativeElement ?? null;
+  }
+}
+
+private drawDataURLOnCanvas(canvas: HTMLCanvasElement, dataURL: string): Promise<void> {
+  return new Promise((resolve) => {
+    const tryDraw = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        requestAnimationFrame(tryDraw);
+        return;
+      }
+
+      const img = new Image();
+      img.src = dataURL;
+      img.onload = () => {
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve();
+      };
+    };
+    tryDraw();
+  });
+}
+
+
+async saveAndCloseSignature() {
+  if (!this.fullscreenPad || !this.signatureFor) return;
+
+  // Salva no FormControl
+  const dataURL = this.fullscreenPad.toDataURL();
+  if (this.signatureFor === 'cq') {
+    this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
+  } else if (this.signatureFor === 'motorista') {
+    this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
+  } else if (this.signatureFor === 'vistoriador') {
+    this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
+  }
+
+  // Desenha no canvas pequeno de forma segura
+  const targetCanvas = this.getTargetCanvas(this.signatureFor);
+  if (targetCanvas) {
+    await this.drawDataURLOnCanvas(targetCanvas, dataURL);
+  }
+
+  // Fecha o modal
+  await this.closeSignatureFullscreen();
+}
+
+
+
+    private getFormattedDatetimeLocal(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const yyyy = date.getFullYear().toString().slice(0, 4); // garante 4 dígitos
+  const MM = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const mm = pad(date.getMinutes());
+
+  return `${dd}/${MM}/${yyyy}T${hh}:${mm}`;
+}
 
   private updateValidators(tipoVeiculo: string): void {
     const isBau = tipoVeiculo === 'Baú';
@@ -260,8 +680,12 @@ export class FormComponent implements OnDestroy {
   }
 
   registrarVistoria() {
-    this.form.controls.dadosIniciais.controls.vistoria.setValue(this.getFormattedTimestamp());
-  }
+  const now = new Date();
+  this.form.controls.dadosIniciais.controls.vistoria.setValue(
+    this.toDatetimeLocal(now)
+  );
+}
+
 
   onFileChange(event: Event, controlPath: string, previewSignal: WritableSignal<string | null>): void {
     const input = event.target as HTMLInputElement;
@@ -294,6 +718,12 @@ export class FormComponent implements OnDestroy {
         return currentGroup ? currentGroup.valid : false;
     });
   }
+  private toDatetimeLocal(date: Date): string {
+  const pad = (n: number) => n < 10 ? '0' + n : n;
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 
   previousStep(): void {
     if (this.currentStep() > 1) {
@@ -343,62 +773,75 @@ export class FormComponent implements OnDestroy {
 
     return processedValue;
   }
+  private formatarParaBanco(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} `
+       + `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
-  async onSubmit() {
-    this.form.markAllAsTouched();
-    if (!this.form.valid) {
-      console.error('Formulário inválido.');
-      return;
-    }
+readonly finished = output<void>();
 
-    this.isSubmitting.set(true);
-    this.submissionError.set(null);
-    this.submittedData.set(null);
+async onSubmit() {
+  this.form.markAllAsTouched();
+  if (!this.form.valid) {
+    console.error('Formulário inválido.');
+    return;
+  }
 
-    try {
-        this.form.controls.dadosIniciais.controls.fim.setValue(this.getFormattedTimestamp());
-        
-        const rawValue = this.form.getRawValue();
-        const payload = this.processFormValue(rawValue);
+  this.isSubmitting.set(true);
 
-        // Send the request as JSON
-        const response = await fetch('http://127.0.0.1:5000/vistoria', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(payload),
-        });
+  // Atualiza a barra para 100%
+  this.currentStep.update(() => this.totalSteps);
 
-        if (!response.ok) {
-            let errorBody;
-            try {
-                errorBody = await response.json();
-            } catch (e) {
-                errorBody = await response.text();
-            }
-            throw new Error(`Erro no servidor: ${response.statusText} (${response.status}). Detalhes: ${typeof errorBody === 'string' ? errorBody : JSON.stringify(errorBody)}`);
+  this.submissionError.set(null);
+  this.submittedData.set(null);
+
+  // Prepara os dados do formulário
+  const dados = this.form.controls.dadosIniciais.controls;
+  this.form.controls.dadosIniciais.controls.fim.setValue(this.formatarParaBanco(new Date()));
+
+  if (dados.chegada.value) {
+    dados.chegada.setValue(this.formatarParaBanco(new Date(dados.chegada.value)));
+  }
+
+  if (dados.vistoria.value) {
+    dados.vistoria.setValue(this.formatarParaBanco(new Date(dados.vistoria.value)));
+  }
+
+  const rawValue = this.form.getRawValue();
+  const payload = this.processFormValue(rawValue);
+
+  // Navega para o painel imediatamente
+  this.finished.emit();
+  alert('"A vistoria está sendo enviada em segundo plano. Evite fechar ou recarregar a página até receber confirmação no sistema."');
+  this.router.navigate(['/painel']);
+  window.scrollTo(0, 0);
+
+  // Envia os dados em background (fire-and-forget)
+  fetch('http://192.168.53.193:5000/vistoria', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(async response => {
+      if (!response.ok) {
+        let errorBody;
+        try {
+          errorBody = await response.json();
+        } catch (e) {
+          errorBody = await response.text();
         }
-
+        console.error(`Erro no servidor: ${response.statusText} (${response.status}). Detalhes:`, errorBody);
+      } else {
         const responseData = await response.json();
         console.log('Vistoria enviada com sucesso!', responseData);
-        
-        this.submittedData.set(JSON.stringify(payload, null, 2));
-        window.scrollTo(0, 0);
-
-    } catch (err) {
-        console.error('Erro ao enviar formulário:', err);
-        let errorMessage = 'Não foi possível enviar a vistoria.';
-        if (err instanceof Error) {
-            if (err.message.includes('Failed to fetch')) {
-                errorMessage = `Não foi possível conectar à API. Verifique se o backend em http://127.0.0.1:5000 está rodando.`;
-            } else {
-                errorMessage = err.message;
-            }
-        }
-        this.submissionError.set(errorMessage);
-    } finally {
-        this.isSubmitting.set(false);
-    }
-  }
+      }
+    })
+    .catch(err => {
+      console.error('Erro de rede ao enviar vistoria:', err);
+    })
+    .finally(() => {
+      this.isSubmitting.set(false);
+    });
+}
 }

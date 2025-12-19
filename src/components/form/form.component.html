@@ -1,9 +1,28 @@
 <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
+
+  <!-- Overlay de Loading -->
+  <div *ngIf="isSubmitting()" class="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center">
+    <div class="bg-white p-6 rounded shadow-lg flex items-center gap-3">
+      <svg class="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span>Enviando vistoria...</span>
+    </div>
+  </div>
+
   @if (submittedData()) {
     <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6" role="alert">
       <p class="font-bold">Dados Enviados com Sucesso!</p>
       <p>As informações foram registradas e enviadas para o servidor.</p>
       <pre class="mt-2 text-sm bg-gray-800 text-white p-3 rounded-md overflow-x-auto"><code>{{ submittedData() }}</code></pre>
+    </div>
+  }
+
+  @if (submissionError()) {
+    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
+      <p class="font-bold">Erro ao Enviar</p>
+      <p>{{ submissionError() }}</p>
     </div>
   }
 
@@ -41,8 +60,12 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
                 <label for="chegada" class="block text-sm font-medium text-gray-700 mb-1">Chegada</label>
-                <input type="datetime-local" id="chegada" formControlName="chegada"
-                      class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                <input type="datetime-local" 
+            id="chegada"
+            formControlName="chegada"
+            max="9999-12-31T23:59"
+            class="block w-full px-4 py-2 border rounded-md shadow-sm"
+
                       [class.border-red-500]="form.controls.dadosIniciais.controls.chegada.invalid && form.controls.dadosIniciais.controls.chegada.touched"
                       [class.border-gray-300]="form.controls.dadosIniciais.controls.chegada.valid || form.controls.dadosIniciais.controls.chegada.untouched">
                 @if (form.controls.dadosIniciais.controls.chegada.invalid && form.controls.dadosIniciais.controls.chegada.touched) {
@@ -52,7 +75,7 @@
               <div>
                 <label for="vistoria" class="block text-sm font-medium text-gray-700 mb-1">Vistoria</label>
                 <div class="flex items-center gap-2">
-                  <input type="text" id="vistoria" formControlName="vistoria"
+                  <input type="datetime-local" id="vistoria" formControlName="vistoria"
                         class="block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed"
                         placeholder="Aguardando registro...">
                   <button type="button" (click)="registrarVistoria()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap">Registrar</button>
@@ -449,34 +472,78 @@
                 <h3 class="text-lg font-medium text-gray-700 mb-4">Placas do Veículo</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <!-- Placa 1 -->
-                    <div>
-                        <label for="placa1" class="block text-sm font-medium text-gray-700 mb-1">Placa 1 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="text" id="placa1" formControlName="placa1" class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched" [class.border-gray-300]="!form.get('fotosVistoria.placas.placa1')?.invalid">
-                        @if(form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 1 é obrigatória.</p> }
+                   <div>
+    <label for="placa1" class="block text-sm font-medium text-gray-700 mb-1">
+        Placa 1 <span class="text-red-500 font-semibold">*</span>
+    </label>
 
-                        <label for="fotoPlaca1" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 1 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="file" id="fotoPlaca1" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca1', placa1Preview)">
-                        @if (placa1Preview()) { <img [src]="placa1Preview()" alt="Prévia Placa 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
-                        @if(form.get('fotosVistoria.placas.fotoPlaca1')?.invalid && form.get('fotosVistoria.placas.fotoPlaca1')?.touched){ <p class="mt-1 text-xs text-red-600">A foto da Placa 1 é obrigatória.</p> }
-                    </div>
+    <div class="relative flex">
+        <input
+            type="text"
+            id="placa1"
+            formControlName="placa1"
+            class="flex-1 px-4 py-2 border rounded-l-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched"
+            [class.border-gray-300]="!form.get('fotosVistoria.placas.placa1')?.invalid"
+        >
+
+        <!-- Mini botão copiar para input -->
+        <button
+            type="button"
+            class="px-3 bg-gray-200 text-gray-800 rounded-r-md hover:bg-gray-300"
+            *ngIf="selectedPlaca"
+            (click)="copySelectedPlacaToInput()"
+            title="Usar placa selecionada"
+        >
+            📋
+        </button>
+    </div>
+
+    @if(form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched){
+        <p class="mt-1 text-xs text-red-600">A Placa 1 é obrigatória.</p>
+    }
+
+    <!-- Foto Placa 1 continua igual -->
+    <label for="fotoPlaca1" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">
+        Selecionar Foto Placa 1 <span class="text-red-500 font-semibold">*</span>
+    </label>
+    <input type="file" id="fotoPlaca1" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca1', placa1Preview)">
+    @if (placa1Preview()) { 
+        <img [src]="placa1Preview()" alt="Prévia Placa 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> 
+    }
+</div>
+
                     <!-- Placa 2 -->
                     <div>
-                        <label for="placa2" class="block text-sm font-medium text-gray-700 mb-1">Placa 2 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="text" id="placa2" formControlName="placa2" class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" [class.border-red-500]="form.get('fotosVistoria.placas.placa2')?.invalid && form.get('fotosVistoria.placas.placa2')?.touched" [class.border-gray-300]="!form.get('fotosVistoria.placas.placa2')?.invalid">
+                      <label for="placa2" class="block text-sm font-medium text-gray-700 mb-1">Placa 2 <span class="text-red-500 font-semibold">*</span></label>
+                      <input
+                          type="text"
+                          id="placa2"
+                          formControlName="placa2"
+                          (input)="formatarPlaca($event)"
+                          class="block w-full px-4 py-2 border rounded-md shadow-sm">
+
                         @if(form.get('fotosVistoria.placas.placa2')?.invalid && form.get('fotosVistoria.placas.placa2')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 2 é obrigatória.</p> }
 
                         <label for="fotoPlaca2" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 2 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="file" id="fotoPlaca2" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca2', placa2Preview)">
+                        <input type="file" id="fotoPlaca2"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca2', placa2Preview)">
                         @if (placa2Preview()) { <img [src]="placa2Preview()" alt="Prévia Placa 2" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
                         @if(form.get('fotosVistoria.placas.fotoPlaca2')?.invalid && form.get('fotosVistoria.placas.fotoPlaca2')?.touched){ <p class="mt-1 text-xs text-red-600">A foto da Placa 2 é obrigatória.</p> }
                     </div>
                     <!-- Placa 3 (Opcional) -->
                     <div>
-                        <label for="placa3" class="block text-sm font-medium text-gray-700 mb-1">Placa 3 (Opcional)</label>
-                        <input type="text" id="placa3" formControlName="placa3" class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 border-gray-300">
+<label for="placa3" class="block text-sm font-medium text-gray-700 mb-1">
+        Placa 3 (Opcional)
+    </label>
+    <input
+        type="text"
+        id="placa3"
+        formControlName="placa3"
+        (input)="formatarPlaca($event)"
+        class="block w-full px-4 py-2 border rounded-md shadow-sm">
                         
                         <label for="fotoPlaca3" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 3</label>
-                        <input type="file" id="fotoPlaca3" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca3', placa3Preview)">
+                        <input type="file" id="fotoPlaca3"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca3', placa3Preview)">
                         @if (placa3Preview()) { <img [src]="placa3Preview()" alt="Prévia Placa 3" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
                     </div>
                 </div>
@@ -489,14 +556,14 @@
                     <!-- Foto Interior 1 -->
                     <div>
                         <label for="fotoInterior1" class="inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Foto Interior 1 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="file" id="fotoInterior1" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior1', interior1Preview)">
+                        <input type="file" id="fotoInterior1"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior1', interior1Preview)">
                         @if (interior1Preview()) { <img [src]="interior1Preview()" alt="Prévia Interior 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
                         @if(form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.invalid && form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.touched){ <p class="mt-1 text-xs text-red-600">A Foto 1 do interior é obrigatória.</p> }
                     </div>
                     <!-- Foto Interior 2 (Opcional) -->
                     <div>
                         <label for="fotoInterior2" class="inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Foto Interior 2 (Opcional)</label>
-                        <input type="file" id="fotoInterior2" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior2', interior2Preview)">
+                        <input type="file" id="fotoInterior2"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior2', interior2Preview)">
                         @if (interior2Preview()) { <img [src]="interior2Preview()" alt="Prévia Interior 2" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
                     </div>
                 </div>
@@ -505,52 +572,138 @@
       }
       @case (5) {
         <!-- Seção Finalização e Assinaturas -->
-        <div formGroupName="finalizacao">
-            <h2 class="text-xl font-semibold text-gray-800 mb-6">Finalização e Assinaturas</h2>
+<div formGroupName="finalizacao">
+    <h2 class="text-xl font-semibold text-gray-800 mb-6">Finalização e Assinaturas</h2>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                <!-- Controle de Qualidade -->
-                <div class="space-y-2">
-                    <label for="controleQualidadeNome" class="block text-sm font-medium text-gray-700">Nome Controle de Qualidade <span class="text-red-500">*</span></label>
-                    <input type="text" id="controleQualidadeNome" formControlName="controleQualidadeNome" class="block w-full px-4 py-2 border rounded-md shadow-sm" [class.border-red-500]="form.get('finalizacao.controleQualidadeNome')?.invalid && form.get('finalizacao.controleQualidadeNome')?.touched" [class.border-gray-300]="!form.get('finalizacao.controleQualidadeNome')?.invalid">
-                    @if(form.get('finalizacao.controleQualidadeNome')?.invalid && form.get('finalizacao.controleQualidadeNome')?.touched) { <p class="text-xs text-red-600">O nome é obrigatório.</p> }
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-                    <label class="block text-sm font-medium text-gray-700 pt-2">Assinatura Controle de Qualidade <span class="text-red-500">*</span></label>
-                    <div class="relative">
-                        <canvas #controleQualidadeCanvas class="border rounded-md w-full h-32 bg-gray-50 touch-none" [class.border-red-500]="form.get('finalizacao.controleQualidadeAssinatura')?.invalid && form.get('finalizacao.controleQualidadeAssinatura')?.touched" [class.border-gray-300]="!form.get('finalizacao.controleQualidadeAssinatura')?.invalid"></canvas>
-                        <button type="button" (click)="limparAssinatura('cq')" class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded">Limpar</button>
-                    </div>
-                    @if(form.get('finalizacao.controleQualidadeAssinatura')?.invalid && form.get('finalizacao.controleQualidadeAssinatura')?.touched) { <p class="text-xs text-red-600">A assinatura é obrigatória.</p> }
+        <!-- CONTROLE DE QUALIDADE -->
+        <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">
+                Nome Controle de Qualidade <span class="text-red-500">*</span>
+            </label>
+            <input type="text"
+                id="controleQualidadeNome"
+                formControlName="controleQualidadeNome"
+                class="block w-full px-4 py-2 border rounded-md shadow-sm"
+                [class.border-red-500]="form.get('finalizacao.controleQualidadeNome')?.invalid &&
+                                        form.get('finalizacao.controleQualidadeNome')?.touched">
+
+            <label class="block text-sm font-medium text-gray-700 pt-2">
+                Assinatura Controle de Qualidade <span class="text-red-500">*</span>
+            </label>
+
+            @if(!form.get('finalizacao.controleQualidadeAssinatura')?.value) {
+                <button type="button"
+                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
+                    (click)="openSignatureFullscreen('cq')">Assinar CQ</button>
+            }
+
+            @if(form.get('finalizacao.controleQualidadeAssinatura')?.value) {
+                <div class="relative">
+                    <canvas #controleQualidadeCanvas
+                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
+
+                    <button type="button"
+                        (click)="openSignatureFullscreen('cq')"
+                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
+                               text-gray-700 px-2 py-1 rounded">
+                        Reassinar
+                    </button>
                 </div>
+            }
 
-                <!-- Motorista -->
-                <div class="space-y-2">
-                    <label for="motoristaNome" class="block text-sm font-medium text-gray-700">Nome Motorista <span class="text-red-500">*</span></label>
-                    <input type="text" id="motoristaNome" formControlName="motoristaNome" class="block w-full px-4 py-2 border rounded-md shadow-sm" [class.border-red-500]="form.get('finalizacao.motoristaNome')?.invalid && form.get('finalizacao.motoristaNome')?.touched" [class.border-gray-300]="!form.get('finalizacao.motoristaNome')?.invalid">
-                    @if(form.get('finalizacao.motoristaNome')?.invalid && form.get('finalizacao.motoristaNome')?.touched) { <p class="text-xs text-red-600">O nome é obrigatório.</p> }
+            @if(form.get('finalizacao.controleQualidadeAssinatura')?.invalid &&
+                form.get('finalizacao.controleQualidadeAssinatura')?.touched) {
+                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
+            }
+        </div>
 
-                    <label class="block text-sm font-medium text-gray-700 pt-2">Assinatura Motorista <span class="text-red-500">*</span></label>
-                    <div class="relative">
-                        <canvas #motoristaCanvas class="border rounded-md w-full h-32 bg-gray-50 touch-none" [class.border-red-500]="form.get('finalizacao.motoristaAssinatura')?.invalid && form.get('finalizacao.motoristaAssinatura')?.touched" [class.border-gray-300]="!form.get('finalizacao.motoristaAssinatura')?.invalid"></canvas>
-                        <button type="button" (click)="limparAssinatura('motorista')" class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded">Limpar</button>
-                    </div>
-                    @if(form.get('finalizacao.motoristaAssinatura')?.invalid && form.get('finalizacao.motoristaAssinatura')?.touched) { <p class="text-xs text-red-600">A assinatura é obrigatória.</p> }
+        <!-- MOTORISTA -->
+        <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">
+                Nome Motorista <span class="text-red-500">*</span>
+            </label>
+            <input type="text"
+                id="motoristaNome"
+                formControlName="motoristaNome"
+                class="block w-full px-4 py-2 border rounded-md shadow-sm"
+                [class.border-red-500]="form.get('finalizacao.motoristaNome')?.invalid &&
+                                        form.get('finalizacao.motoristaNome')?.touched">
+
+            <label class="block text-sm font-medium text-gray-700 pt-2">
+                Assinatura Motorista <span class="text-red-500">*</span>
+            </label>
+
+            @if(!form.get('finalizacao.motoristaAssinatura')?.value) {
+                <button type="button"
+                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
+                    (click)="openSignatureFullscreen('motorista')">Assinar Motorista</button>
+            }
+
+            @if(form.get('finalizacao.motoristaAssinatura')?.value) {
+                <div class="relative">
+                    <canvas #motoristaCanvas
+                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
+
+                    <button type="button"
+                        (click)="openSignatureFullscreen('motorista')"
+                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
+                               text-gray-700 px-2 py-1 rounded">
+                        Reassinar
+                    </button>
                 </div>
+            }
 
-                <!-- Vistoriador -->
-                <div class="space-y-2">
-                    <label for="vistoriadorNome" class="block text-sm font-medium text-gray-700">Nome Vistoriador <span class="text-red-500">*</span></label>
-                    <input type="text" id="vistoriadorNome" formControlName="vistoriadorNome" class="block w-full px-4 py-2 border rounded-md shadow-sm" [class.border-red-500]="form.get('finalizacao.vistoriadorNome')?.invalid && form.get('finalizacao.vistoriadorNome')?.touched" [class.border-gray-300]="!form.get('finalizacao.vistoriadorNome')?.invalid">
-                    @if(form.get('finalizacao.vistoriadorNome')?.invalid && form.get('finalizacao.vistoriadorNome')?.touched) { <p class="text-xs text-red-600">O nome é obrigatório.</p> }
+            @if(form.get('finalizacao.motoristaAssinatura')?.invalid &&
+                form.get('finalizacao.motoristaAssinatura')?.touched) {
+                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
+            }
+        </div>
 
-                    <label class="block text-sm font-medium text-gray-700 pt-2">Assinatura Vistoriador <span class="text-red-500">*</span></label>
-                    <div class="relative">
-                        <canvas #vistoriadorCanvas class="border rounded-md w-full h-32 bg-gray-50 touch-none" [class.border-red-500]="form.get('finalizacao.vistoriadorAssinatura')?.invalid && form.get('finalizacao.vistoriadorAssinatura')?.touched" [class.border-gray-300]="!form.get('finalizacao.vistoriadorAssinatura')?.invalid"></canvas>
-                        <button type="button" (click)="limparAssinatura('vistoriador')" class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-2 py-1 rounded">Limpar</button>
-                    </div>
-                    @if(form.get('finalizacao.vistoriadorAssinatura')?.invalid && form.get('finalizacao.vistoriadorAssinatura')?.touched) { <p class="text-xs text-red-600">A assinatura é obrigatória.</p> }
+        <!-- VISTORIADOR -->
+        <div class="space-y-2">
+            <label class="block text-sm font-medium text-gray-700">
+                Nome Vistoriador <span class="text-red-500">*</span>
+            </label>
+            <input type="text"
+                id="vistoriadorNome"
+                formControlName="vistoriadorNome"
+                class="block w-full px-4 py-2 border rounded-md shadow-sm"
+                [class.border-red-500]="form.get('finalizacao.vistoriadorNome')?.invalid &&
+                                        form.get('finalizacao.vistoriadorNome')?.touched">
+
+            <label class="block text-sm font-medium text-gray-700 pt-2">
+                Assinatura Vistoriador <span class="text-red-500">*</span>
+            </label>
+
+            @if(!form.get('finalizacao.vistoriadorAssinatura')?.value) {
+                <button type="button"
+                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
+                    (click)="openSignatureFullscreen('vistoriador')">Assinar Vistoriador</button>
+            }
+
+            @if(form.get('finalizacao.vistoriadorAssinatura')?.value) {
+                <div class="relative">
+                    <canvas #vistoriadorCanvas
+                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
+
+                    <button type="button"
+                        (click)="openSignatureFullscreen('vistoriador')"
+                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
+                               text-gray-700 px-2 py-1 rounded">
+                        Reassinar
+                    </button>
                 </div>
-            </div>
+            }
+
+            @if(form.get('finalizacao.vistoriadorAssinatura')?.invalid &&
+                form.get('finalizacao.vistoriadorAssinatura')?.touched) {
+                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
+            }
+        </div>
+
+    </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
                 <!-- Caminhão Liberado? -->
@@ -575,7 +728,7 @@
                 <label for="observacoes" class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
                 <textarea id="observacoes" formControlName="observacoes" rows="4" class="block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
             </div>
-        </div>
+       </div>
       }
     }
 
@@ -614,4 +767,37 @@
       </div>
     </div>
   </form>
+
+<!-- FULLSCREEN SIGNATURE MODAL -->
+<div id="signatureFullscreen"
+    class="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm hidden 
+           flex-col items-center justify-center z-[9999]">
+
+    <div class="bg-white rounded-lg p-4 shadow-xl w-full max-w-2xl">
+        <h2 class="text-lg font-semibold mb-2">Assinatura</h2>
+
+        <canvas #fullscreenSignatureCanvas
+                class="w-full h-64 border rounded-md bg-gray-50 touch-none"></canvas>
+
+        <div class="flex justify-between mt-4">
+            <button type="button"
+                    class="px-4 py-2 bg-gray-200 rounded"
+                    (click)="closeSignatureFullscreen()">
+                Fechar
+            </button>
+             <button type="button"
+                     class="px-4 py-2 bg-yellow-500 text-white rounded"
+                     (click)="clearSignature()">
+                Limpar
+             </button>
+
+            <button type="button"
+                    class="px-4 py-2 bg-blue-600 text-white rounded"
+                    (click)="saveSignature()">
+                Salvar Assinatura
+            </button>
+        </div>
+    </div>
+</div>
+
 </div>

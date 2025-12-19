@@ -9,16 +9,15 @@
       "sourceRoot": "./",
       "prefix": "app",
       "architect": {
-        "build": {
-          "builder": "@angular/build:application",
-          "options": {
-            "outputPath": {
-              "base": "./dist",
-              "browser": "."
-            },
-            "browser": "index.tsx",
-            "tsConfig": "tsconfig.json"
-          },
+  "build": {
+    "builder": "@angular/build:application",
+    "options": {
+      "outputPath": "./dist",
+      "tsConfig": "tsconfig.json",
+      "browser": "index.tsx",
+      "assets": ["src/images"]
+    },
+
           "configurations": {
             "production": {
               "outputHashing": "all"

@@ -6,17 +6,36 @@ import { PainelComponent } from './components/painel/painel.component';
   selector: 'app-root',
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormComponent, PainelComponent]
+  imports: [
+    FormComponent,
+    PainelComponent,
+  ]
 })
 export class AppComponent {
-  readonly view = signal<'list' | 'form'>('list');
+
+  // controla qual tela aparece (mesma rota)
+  readonly view = signal<'list' | 'form' | 'agendar'>('list');
+
+  // usado quando abre o formulário de vistoria
   readonly selectedPlaca = signal<string | null>(null);
 
-  onInspectionSelected(placa: string): void {
+  // navegação pela navbar
+  setView(view: 'list' | 'agendar'): void {
+    this.selectedPlaca.set(null);
+    this.view.set(view);
+  }
+  
+
+
+  // chamado pelo Painel ao clicar numa vistoria
+  onInspectionSelected(placa: string) {
+  setTimeout(() => {
     this.selectedPlaca.set(placa);
     this.view.set('form');
-  }
+  });
+}
 
+  // voltar do formulário para o painel
   goBack(): void {
     this.selectedPlaca.set(null);
     this.view.set('list');
