@@ -33,7 +33,7 @@
       <ul role="list" class="divide-y divide-gray-200">
         @for (inspection of inspections(); track inspection.placa) {
           <li class="py-4 px-2 flex items-center justify-between cursor-pointer hover:bg-gray-50 rounded-md transition-colors duration-150"
-                (click)="selectInspection(inspection.placa)">
+                (click)="selectInspection(inspection)">
             <div class="flex items-center space-x-4">
               <div class="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

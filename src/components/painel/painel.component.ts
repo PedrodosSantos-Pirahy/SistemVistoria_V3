@@ -25,7 +25,7 @@ interface Inspection {
 export class PainelComponent implements OnInit {
 
 
-  @Input() onSelect!: (placa: string) => void;
+ // @Input() onSelect!: (placa: string) => void;
   /**
    * Lista de vistorias pendentes exibidas no painel
    * Utiliza signal para melhor performance com OnPush
@@ -138,10 +138,13 @@ export class PainelComponent implements OnInit {
       this.loading.set(false);
     }
   }
-  selectInspection(inspection: Inspection) {
+selectInspection(inspection: Inspection) {
   if (this.showDecisionModal()) return;
-  this.onSelect(inspection.placa);
+
+  this.inspectionSelected.emit(inspection.placa);
 }
+
+
 
   
 

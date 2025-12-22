@@ -22,10 +22,7 @@
 
   <main class="w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
     @if (view() === 'list') {
-      <app-painel 
-        [onSelect]="onInspectionSelected.bind(this)">
-      </app-painel>
-
+      <app-painel (inspectionSelected)="onInspectionSelected($event)"></app-painel>
     } @else {
       <app-form
   [placa]="selectedPlaca()"

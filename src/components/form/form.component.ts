@@ -4,6 +4,7 @@ import { Component, ChangeDetectionStrategy, signal, OnDestroy, WritableSignal, 
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { Router } from '@angular/router';
+import { CommonModule } from '@angular/common';
 
 declare var SignaturePad: any;
 
@@ -16,7 +17,7 @@ interface FormStep {
 @Component({
   selector: 'app-form',
   templateUrl: './form.component.html',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FormComponent implements OnDestroy {
@@ -185,39 +186,14 @@ chegada: new FormControl('', {
   readonly showToast = signal(false);
   signatureFor: 'cq' | 'motorista' | 'vistoriador' | null = null;
 
- /* selectedPlaca() {
+   
+
+    
+  selectedPlaca() {
   const placa = this.form.get('fotosVistoria.placas.placa1')?.value;
   console.log('selectedPlaca:', placa);  // <-- aqui você vê o valor
   return placa;
-} */
-
-// Sinal ou variável para armazenar a placa selecionada da vistoria
-selectedPlaca: string | null = null;
-
-// Função chamada quando o usuário seleciona uma vistoria
-onInspectionSelected(inspection: any) {
-  if (!inspection?.placa) return;
-
-  // pega somente a placa após a barra, se houver
-  const placaFormatada = inspection.placa.includes('/')
-    ? inspection.placa.split('/')[1]
-    : inspection.placa;
-
-  this.selectedPlaca = placaFormatada;
-
-  // Opcional: preencher automaticamente no input de placa1
-  this.form.get('fotosVistoria.placas.placa1')?.setValue(placaFormatada, { emitEvent: false });
-
-  console.log('Placa selecionada para vistoria:', placaFormatada);
 }
-
-// Função do mini botão “copiar para input”
-copySelectedPlacaToInput() {
-  if (!this.selectedPlaca) return;
-
-  this.form.get('fotosVistoria.placas.placa1')?.setValue(this.selectedPlaca);
-}
-
 
 
 updatePlaca(placaDoBanco: string) {
@@ -234,42 +210,86 @@ updatePlaca(placaDoBanco: string) {
   console.log('Placa atualizada no formulário:', placaFormatada);
 }
 
-
+private placaInicializada = false;
 constructor(private router: Router) {
-  // Efeito para atualizar a placa
- /* effect(() => {
-    const currentPlaca = this.placa();
-    if (currentPlaca) {
-      const placaFormatada = currentPlaca.includes('/')
-        ? currentPlaca.split('/')[1]
-        : currentPlaca;
 
-      this.form.controls.fotosVistoria.controls.placas.controls.placa1.setValue(placaFormatada);
-    }
-  });*/
+  effect(() => {
+  if (this.placaInicializada) return;
 
-  // Subscrição para validar tipo de veículo
-  this.veiculoSubscription = this.form.controls.dadosIniciais.controls.tipoVeiculo.valueChanges.subscribe(value => {
-    this.updateValidators(value);
-  });
+  const placaRecebida = this.placa();
+  if (!placaRecebida) return;
 
-  
+  const placaFormatada = placaRecebida.includes('/')
+    ? placaRecebida.split('/')[1]
+    : placaRecebida;
+
+  this.form
+    .get('fotosVistoria.placas.placa1')
+    ?.setValue(placaFormatada);
+
+  this.placaInicializada = true;
+});
+
+
+  // validação por tipo de veículo (continua igual)
+  this.veiculoSubscription =
+    this.form.controls.dadosIniciais.controls.tipoVeiculo.valueChanges
+      .subscribe(value => this.updateValidators(value));
 }
 
 
-  formatarPlaca(event: any) {
-  let value = event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+formatarPlaca(event: Event, controlName: 'placa1' | 'placa2' | 'placa3') {
+  const input = event.target as HTMLInputElement;
+  if (!input) return;
+
+  let value = input.value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+  // Limita caracteres crus (sem hífen)
+  value = value.slice(0, 7);
+
+  // Aplica hífen após 3 caracteres
+  if (value.length > 3) {
+    value = value.slice(0, 3) + '-' + value.slice(3);
+  }
+
+  input.value = value;
+
+  this.form
+    .get('fotosVistoria.placas.' + controlName)
+    ?.setValue(value, { emitEvent: false });
+}
+
+
+
+formatarPlacaControl(
+  controlName: 'placa2' | 'placa3',
+  event: Event
+) {
+  const input = event.target as HTMLInputElement;
+  if (!input) return;
+
+  let value = input.value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
 
   if (value.length > 3) {
-    value = value.slice(0, 3) + "-" + value.slice(3);
+    value = value.slice(0, 3) + '-' + value.slice(3);
   }
 
   if (value.length > 8) {
-    value = value.slice(0, 8); // Limita AAA-1A11 / AAA-1111
+    value = value.slice(0, 8);
   }
 
-  event.target.value = value;
+  input.value = value;
+
+  this.form
+    .get(`fotosVistoria.placas.${controlName}`)
+    ?.setValue(value, { emitEvent: false });
 }
+
+
 toDatetimeLocalWithSeconds(date: Date): string {
   const pad = (n: number) => n.toString().padStart(2, '0');
 
@@ -281,6 +301,12 @@ toDatetimeLocalWithSeconds(date: Date): string {
     this.veiculoSubscription?.unsubscribe();
   }
 
+  ngOnInit() {
+  console.log(
+    'FORM CONTROL EXISTE:',
+    this.form.get('fotosVistoria.placas.placa1')
+  );
+}
 
  // Estado
  showSignatureFullscreen = signal(false);

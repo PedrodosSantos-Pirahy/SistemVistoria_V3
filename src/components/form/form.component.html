@@ -472,56 +472,25 @@
                 <h3 class="text-lg font-medium text-gray-700 mb-4">Placas do Veículo</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <!-- Placa 1 -->
-                   <div>
-    <label for="placa1" class="block text-sm font-medium text-gray-700 mb-1">
-        Placa 1 <span class="text-red-500 font-semibold">*</span>
-    </label>
+                    <div>
+                        <label for="placa1" class="block text-sm font-medium text-gray-700 mb-1">Placa 1 <span class="text-red-500 font-semibold">*</span></label>
+                        <input type="text" id="placa1" formControlName="placa1" (input)="formatarPlaca($event, 'placa1')" class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched" [class.border-gray-300]="!form.get('fotosVistoria.placas.placa1')?.invalid">
+                        @if(form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 1 é obrigatória.</p> }
 
-    <div class="relative flex">
-        <input
-            type="text"
-            id="placa1"
-            formControlName="placa1"
-            class="flex-1 px-4 py-2 border rounded-l-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched"
-            [class.border-gray-300]="!form.get('fotosVistoria.placas.placa1')?.invalid"
-        >
-
-        <!-- Mini botão copiar para input -->
-        <button
-            type="button"
-            class="px-3 bg-gray-200 text-gray-800 rounded-r-md hover:bg-gray-300"
-            *ngIf="selectedPlaca"
-            (click)="copySelectedPlacaToInput()"
-            title="Usar placa selecionada"
-        >
-            📋
-        </button>
-    </div>
-
-    @if(form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched){
-        <p class="mt-1 text-xs text-red-600">A Placa 1 é obrigatória.</p>
-    }
-
-    <!-- Foto Placa 1 continua igual -->
-    <label for="fotoPlaca1" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">
-        Selecionar Foto Placa 1 <span class="text-red-500 font-semibold">*</span>
-    </label>
-    <input type="file" id="fotoPlaca1" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca1', placa1Preview)">
-    @if (placa1Preview()) { 
-        <img [src]="placa1Preview()" alt="Prévia Placa 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> 
-    }
-</div>
-
+                        <label for="fotoPlaca1" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 1 <span class="text-red-500 font-semibold">*</span></label>
+                        <input type="file" id="fotoPlaca1" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca1', placa1Preview)">
+                        @if (placa1Preview()) { <img [src]="placa1Preview()" alt="Prévia Placa 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
+                        @if(form.get('fotosVistoria.placas.fotoPlaca1')?.invalid && form.get('fotosVistoria.placas.fotoPlaca1')?.touched){ <p class="mt-1 text-xs text-red-600">A foto da Placa 1 é obrigatória.</p> }
+                    </div>
                     <!-- Placa 2 -->
                     <div>
                       <label for="placa2" class="block text-sm font-medium text-gray-700 mb-1">Placa 2 <span class="text-red-500 font-semibold">*</span></label>
                       <input
-                          type="text"
-                          id="placa2"
-                          formControlName="placa2"
-                          (input)="formatarPlaca($event)"
-                          class="block w-full px-4 py-2 border rounded-md shadow-sm">
+  type="text"
+  id="placa2"
+  formControlName="placa2"
+  (input)="formatarPlaca($event, 'placa2')"
+  class="block w-full px-4 py-2 border rounded-md shadow-sm">
 
                         @if(form.get('fotosVistoria.placas.placa2')?.invalid && form.get('fotosVistoria.placas.placa2')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 2 é obrigatória.</p> }
 
@@ -536,12 +505,12 @@
         Placa 3 (Opcional)
     </label>
     <input
-        type="text"
-        id="placa3"
-        formControlName="placa3"
-        (input)="formatarPlaca($event)"
-        class="block w-full px-4 py-2 border rounded-md shadow-sm">
-                        
+  type="text"
+  id="placa3"
+  formControlName="placa3"
+  (input)="formatarPlaca($event, 'placa3')"
+  class="block w-full px-4 py-2 border rounded-md shadow-sm">
+
                         <label for="fotoPlaca3" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 3</label>
                         <input type="file" id="fotoPlaca3"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca3', placa3Preview)">
                         @if (placa3Preview()) { <img [src]="placa3Preview()" alt="Prévia Placa 3" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }

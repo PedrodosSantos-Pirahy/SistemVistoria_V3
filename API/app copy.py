@@ -33,7 +33,7 @@ CORS(app)
 # --------------------------------------------------------------------------
 # CONFIG GOOGLE
 # --------------------------------------------------------------------------
-SERVICE_ACCOUNT_FILE = r"C:\Users\pedrosantos\OneDrive - PIRAHY\DEV\Sistema Vistorias - Pirahy\SistemVistoria\API\service-account.json"
+SERVICE_ACCOUNT_FILE = r"C:\DEV\Sistema Vistorias - Pirahy\SistemVistoria_V3\API\service-account.json"
 SHEET_ID = "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw"
 SHEET_TAB = "Protec"
 AUDITORIA_TAB = "Auditoria"

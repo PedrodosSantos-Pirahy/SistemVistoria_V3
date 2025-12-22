@@ -14,25 +14,29 @@ import { PainelComponent } from './components/painel/painel.component';
 export class AppComponent {
 
   // controla qual tela aparece (mesma rota)
-  readonly view = signal<'list' | 'form' | 'agendar'>('list');
+  readonly view = signal<'list' | 'form'>('list');
 
   // usado quando abre o formulário de vistoria
   readonly selectedPlaca = signal<string | null>(null);
 
   // navegação pela navbar
-  setView(view: 'list' | 'agendar'): void {
+  setView(view: 'list' ): void {
     this.selectedPlaca.set(null);
     this.view.set(view);
   }
+  placaSelecionada: string | null = null;
+
+onPlacaSelecionada = (placa: string) => {
+  this.placaSelecionada = placa;
+};
+
   
 
 
   // chamado pelo Painel ao clicar numa vistoria
   onInspectionSelected(placa: string) {
-  setTimeout(() => {
-    this.selectedPlaca.set(placa);
-    this.view.set('form');
-  });
+  this.selectedPlaca.set(placa);
+  this.view.set('form');
 }
 
   // voltar do formulário para o painel
