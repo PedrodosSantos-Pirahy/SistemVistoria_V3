@@ -139,6 +139,7 @@ export class PainelComponent implements OnInit {
     }
   }
 selectInspection(inspection: Inspection) {
+  console.log('PAINEL EMITINDO:', inspection.placa);
   if (this.showDecisionModal()) return;
 
   this.inspectionSelected.emit(inspection.placa);

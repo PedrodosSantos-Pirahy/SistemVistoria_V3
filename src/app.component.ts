@@ -35,9 +35,11 @@ onPlacaSelecionada = (placa: string) => {
 
   // chamado pelo Painel ao clicar numa vistoria
   onInspectionSelected(placa: string) {
+  console.log('APP RECEBEU:', placa);
   this.selectedPlaca.set(placa);
   this.view.set('form');
 }
+
 
   // voltar do formulário para o painel
   goBack(): void {

@@ -236,7 +236,8 @@ def get_agend_v2_columns(filter_date=None):
     try:
         service = sheets_service
 
-        range_name = "Agend_V2!A2:Z200"
+        range_name = "Agend_V2!A1:AZ"
+ # ATENÇÃO AO NUMERO MAXIMO DO RANGE !!!!!!!!!!!!!!!!!!!!!
         result = service.values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=range_name
@@ -500,6 +501,12 @@ def receive_vistoria():
         fv = data.get("fotosVistoria", {})
         fin = data.get("finalizacao", {})
 
+        #--------------------
+        # PEGAR O ID
+        #--------------------
+        id_vistoria = data.get("id", "")
+        log.info("ID RECEBIDO NO /vistoria: %s", data.get("id"))
+
         # --------------------
         # UPLOAD FOTOS / ASSINATURAS
         # --------------------
@@ -605,7 +612,8 @@ def receive_vistoria():
         # SALVAR NO GOOGLE SHEETS
         # --------------------
         linha = [
-            "", "",  # Colunas A e B vazias
+            id_vistoria, 
+            "CONCLUIDO",  # Colunas A e B vazias
             di.get("chegada", ""),
             di.get("vistoria", ""),
             di.get("fim", ""),
