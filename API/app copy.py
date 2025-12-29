@@ -236,8 +236,7 @@ def get_agend_v2_columns(filter_date=None):
     try:
         service = sheets_service
 
-        range_name = "Agend_V2!A1:AZ"
- # ATENÇÃO AO NUMERO MAXIMO DO RANGE !!!!!!!!!!!!!!!!!!!!!
+        range_name = "Agend_V2!A1:AZ" 
         result = service.values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=range_name
@@ -254,21 +253,26 @@ def get_agend_v2_columns(filter_date=None):
             date_value = row[1] if len(row) > 1 else ""
             status = row[10] if len(row) > 10 else ""   # coluna K
             placa = row[25] if len(row) > 25 else ""    # coluna Z
-            hora  = row[0] if len(row) > 0 else ""   
-            id_vistoria = row[24] if len(row) > 24 else ""   # exemplo: coluna A
+            hora  = row[2] if len(row) > 2 else ""      # coluna C
+            id_vistoria = row[24] if len(row) > 24 else ""  # coluna Y
 
             if date_value == hoje_str and status.strip().lower() != "concluida":
                 selected_data.append({
+                    "hora": hora,
                     "placa": placa,
                     "status": status,
                     "id": id_vistoria
                 })
+
+        # ✅ ORDENAÇÃO POR HORÁRIO (CRESCENTE)
+        selected_data.sort(key=lambda x: x.get("hora", ""))
 
         return selected_data
 
     except Exception as e:
         log.exception("Erro Sheets: %s", e)
         return None
+
 
 def extract_status(obj):
     return obj.get("status", "") if obj else ""
