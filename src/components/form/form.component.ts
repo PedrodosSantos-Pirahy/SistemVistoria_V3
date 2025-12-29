@@ -23,6 +23,8 @@ interface FormStep {
 export class FormComponent implements OnDestroy {
 
   placa = input<string | null>(null);
+  vistoriaId = signal<string | null>(null);
+
 
 @ViewChild('controleQualidadeCanvas') controleQualidadeCanvas!: ElementRef<HTMLCanvasElement>;
 @ViewChild('motoristaCanvas') motoristaCanvas!: ElementRef<HTMLCanvasElement>;
@@ -194,7 +196,43 @@ chegada: new FormControl('', {
   console.log('selectedPlaca:', placa);  // <-- aqui você vê o valor
   return placa;
 }
+async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
+  try {
+    const response = await fetch('http://192.168.53.193:5000/pendencias');
 
+    if (!response.ok) {
+      console.error('Erro ao buscar pendências');
+      return null;
+    }
+
+    const data = await response.json();
+    const pendentes = data?.pendentes ?? [];
+
+    // normaliza a placa do formulário
+    const placaNormalizada = placaForm.trim().toUpperCase();
+
+    const encontrada = pendentes.find((p: any) => {
+      if (!p?.placa) return false;
+
+      // "10:00/JBQ-7H55" → "JBQ-7H55"
+      const placaApi = p.placa.split('/').pop()?.toUpperCase();
+
+      return placaApi === placaNormalizada;
+    });
+
+    if (!encontrada) {
+      console.warn('❌ Nenhuma pendência encontrada para a placa:', placaNormalizada);
+      return null;
+    }
+
+    console.log('✅ Pendência encontrada:', encontrada);
+    return encontrada.id ?? null;
+
+  } catch (e) {
+    console.error('Erro ao buscar ID pela placa:', e);
+    return null;
+  }
+}
 
 updatePlaca(placaDoBanco: string) {
   if (!placaDoBanco) return;
@@ -213,7 +251,7 @@ updatePlaca(placaDoBanco: string) {
 private placaInicializada = false;
 constructor(private router: Router) {
 
-  effect(() => {
+  effect(async () => {
   if (this.placaInicializada) return;
 
   const placaRecebida = this.placa();
@@ -223,12 +261,25 @@ constructor(private router: Router) {
     ? placaRecebida.split('/')[1]
     : placaRecebida;
 
+  // mantém exatamente o que você já fazia
   this.form
     .get('fotosVistoria.placas.placa1')
     ?.setValue(placaFormatada);
 
+  // 🔑 NOVO: resolve o ID usando a placa
+  const idEncontrado = await this.buscarIdPorPlaca(placaFormatada);
+
+  if (!idEncontrado) {
+    console.warn('⚠️ ID NÃO ENCONTRADO PARA A PLACA:', placaFormatada);
+  } else {
+    console.log('✅ ID RESOLVIDO:', idEncontrado);
+  }
+
+  this.vistoriaId.set(idEncontrado);
+
   this.placaInicializada = true;
 });
+
 
 
   // validação por tipo de veículo (continua igual)
@@ -835,7 +886,14 @@ async onSubmit() {
   }
 
   const rawValue = this.form.getRawValue();
-  const payload = this.processFormValue(rawValue);
+  const payload = {
+  id: this.vistoriaId(), // 🔑 ID TÉCNICO (NÃO VISUAL)
+  ...this.processFormValue(rawValue)
+};
+  console.log('📦 PAYLOAD ENVIADO PARA /vistoria:');
+  console.log(payload);
+  console.log('📦 PAYLOAD STRINGIFY:');
+  console.log(JSON.stringify(payload, null, 2));
 
   // Navega para o painel imediatamente
   this.finished.emit();
