@@ -7,6 +7,22 @@ import re
 import io
 from datetime import datetime
 
+#FILA + WORKER
+from queue import Queue
+from threading import Thread
+import time
+
+vistoria_queue = Queue(maxsize=100)  # evita overload
+
+#Helpers
+import json
+from pathlib import Path
+import traceback
+
+BACKUP_DIR = Path("backups_vistorias")
+BACKUP_DIR.mkdir(exist_ok=True)
+
+
 #PDF
 from flask import render_template
 from weasyprint import HTML
@@ -17,6 +33,16 @@ from googleapiclient.discovery import build
 from google.oauth2.service_account import Credentials
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.http import MediaIoBaseDownload
+
+from dotenv import load_dotenv
+
+print("=== DEBUG INICIAL ===")
+print("Arquivo atual:", __file__)
+print("Diretório atual (cwd):", os.getcwd())
+print("Existe .env aqui?:", Path(".env").exists())
+print("Existe service_account.json aqui?:", Path("service_account.json").exists())
+print("=====================")
+##
 
 # --------------------------------------------------------------------------
 # LOG
@@ -33,9 +59,25 @@ CORS(app)
 # --------------------------------------------------------------------------
 # CONFIG GOOGLE
 # --------------------------------------------------------------------------
-SERVICE_ACCOUNT_FILE = r"C:\DEV\Sistema Vistorias - Pirahy\SistemVistoria_V3\API\service-account.json"
+BASE_DIR = Path(__file__).resolve().parent  # pasta API
+SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
+
+print("SERVICE ACCOUNT PATH:", SERVICE_ACCOUNT_PATH)
+
+if not SERVICE_ACCOUNT_PATH.exists():
+    raise RuntimeError(f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
+
+SCOPES = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+creds = Credentials.from_service_account_file(
+    SERVICE_ACCOUNT_PATH,
+     scopes=SCOPES
+)
+
 SHEET_ID = "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw"
-SHEET_TAB = "Protec"
+SHEET_TAB = "Respostas_V2"
 AUDITORIA_TAB = "Auditoria"
 
 #Comparar
@@ -46,15 +88,30 @@ SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG
 # Pasta/Unidade destino no Drive (pode ser Shared Drive). A service account deve ter acesso.
 DRIVE_FOLDER_ID = "0AKLd3H4beidVUk9PVA"
 
-SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
 
-creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+
+from datetime import timedelta
+
+CACHE_PENDENCIAS = {
+    "data": None,
+    "expires": None
+}
 
 drive_service = build("drive", "v3", credentials=creds)
-sheets_service = build("sheets", "v4", credentials=creds).spreadsheets()
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
+
+http = httplib2.Http(timeout=60)
+authed_http = AuthorizedHttp(creds, http=http)
+
+sheets_service = build(
+    "sheets",
+    "v4",
+    http=authed_http,
+    cache_discovery=False
+).spreadsheets()
+
+
 
 # --------------------------------------------------------------------------
 # HELPERS
@@ -78,6 +135,15 @@ TRANSICOES_VALIDAS = {
     "EXPIRADA": {"REALIZADA_COM_ATRASO"},
 }
 
+#MiniDash da API
+STATUS = {
+    "started_at": datetime.utcnow(),
+    "processing": False,
+    "current_id": None,
+    "processed": 0,
+    "last_error": None,
+    "last_success": None
+}
 
 def detect_mime_and_data(dataurl: str):
     """
@@ -231,32 +297,68 @@ def upload_file_to_drive(file_path: str, filename: str, mime: str):
         log.exception("Erro upload_file_to_drive: %s", e)
         return ""
 
+import time
+from googleapiclient.errors import HttpError
+
+def sheets_get_with_retry(service, spreadsheet_id, range_name, retries=3):
+    for attempt in range(retries):
+        try:
+            return service.values().get(
+                spreadsheetId=spreadsheet_id,
+                range=range_name
+            ).execute()
+        except (HttpError, TimeoutError) as e:
+            log.warning(
+                "Erro Sheets (tentativa %d/%d): %s",
+                attempt + 1, retries, e
+            )
+            if attempt == retries - 1:
+                raise
+            time.sleep(2 ** attempt)  # backoff exponencial
+
 
 def get_agend_v2_columns(filter_date=None):
     try:
-        service = sheets_service
+        now = datetime.now()
 
-        range_name = "Agend_V2!A1:AZ" 
-        result = service.values().get(
-            spreadsheetId=SPREADSHEET_ID,
-            range=range_name
-        ).execute()
+        # ---------- CACHE ----------
+        if (
+            CACHE_PENDENCIAS["data"] is not None
+            and CACHE_PENDENCIAS["expires"] is not None
+            and CACHE_PENDENCIAS["expires"] > now
+            and filter_date is None
+        ):
+            log.info("Retornando pendências do CACHE")
+            return CACHE_PENDENCIAS["data"]
+
+        range_name = "Agend_V2!A1:Z"
+
+        result = sheets_get_with_retry(
+            sheets_service,
+            SPREADSHEET_ID,
+            range_name
+        )
 
         values = result.get("values", [])
         if not values:
             return []
 
-        hoje_str = filter_date or datetime.today().strftime("%d/%m/%Y")
+        hoje_str = filter_date or now.strftime("%d/%m/%Y")
         selected_data = []
 
-        for row in values:
+        for row in values[1:]:  # pula cabeçalho
             date_value = row[1] if len(row) > 1 else ""
-            status = row[10] if len(row) > 10 else ""   # coluna K
-            placa = row[25] if len(row) > 25 else ""    # coluna Z
-            hora  = row[2] if len(row) > 2 else ""      # coluna C
-            id_vistoria = row[24] if len(row) > 24 else ""  # coluna Y
+            hora = row[2] if len(row) > 2 else ""
+            status = row[10] if len(row) > 10 else ""
+            id_vistoria = row[24] if len(row) > 24 else ""
+            placa = row[25] if len(row) > 25 else ""
 
-            if date_value == hoje_str and status.strip().lower() != "concluida":
+            status_normalizado = status.strip().lower()
+
+            if (
+                date_value == hoje_str
+                and status_normalizado not in ("concluida", "cancelada")
+            ):
                 selected_data.append({
                     "hora": hora,
                     "placa": placa,
@@ -264,14 +366,20 @@ def get_agend_v2_columns(filter_date=None):
                     "id": id_vistoria
                 })
 
-        # ✅ ORDENAÇÃO POR HORÁRIO (CRESCENTE)
+
         selected_data.sort(key=lambda x: x.get("hora", ""))
+
+        # ---------- SALVA CACHE ----------
+        if filter_date is None:
+            CACHE_PENDENCIAS["data"] = selected_data
+            CACHE_PENDENCIAS["expires"] = now + timedelta(minutes=5)
 
         return selected_data
 
     except Exception as e:
-        log.exception("Erro Sheets: %s", e)
+        log.exception("Erro Sheets pendencias: %s", e)
         return None
+
 
 
 def extract_status(obj):
@@ -432,7 +540,7 @@ def achar_ou_criar_linha_por_id(id_vistoria: str):
     - Se não achar → cria nova linha com o ID
     """
 
-    log.info("Buscando ID na Protec: %s", id_vistoria)
+    log.info("Buscando ID na Respostas_V2: %s", id_vistoria)
 
     result = sheets_service.values().get(
         spreadsheetId=SHEET_ID,
@@ -460,12 +568,276 @@ def achar_ou_criar_linha_por_id(id_vistoria: str):
 
     return nova_linha
 
+def processar_vistoria(data: dict) -> dict:
 
+    log.info("PROCESSAR_VISTORIA | Início do processamento")
+    log.debug("PROCESSAR_VISTORIA | Payload completo: %s", json.dumps(data, indent=2))
+
+    # --------------------
+    # DADOS INICIAIS
+    # --------------------
+    di = data.get("dadosIniciais", {})
+    ii = data.get("inspecaoInterna", {})
+    pc = data.get("protecaoCarga", {})
+    dv = data.get("detalhesVeiculo", {})
+    fv = data.get("fotosVistoria", {})
+    fin = data.get("finalizacao", {})
+
+    id_vistoria = data.get("id", "")
+    log.info("PROCESSAR_VISTORIA | ID=%s", id_vistoria)
+    log.debug("DADOS INICIAIS: %s", di)
+    log.debug("INSPECAO INTERNA: %s", ii)
+    log.debug("PROTECAO CARGA: %s", pc)
+    log.debug("DETALHES VEICULO: %s", dv)
+    log.debug("FOTOS VISTORIA: %s", fv)
+    log.debug("FINALIZACAO: %s", fin)
+
+    # --------------------
+    # UPLOAD FOTOS / ASSINATURAS
+    # --------------------
+    uploaded = {}
+    try:
+        placas = fv.get("placas", {})
+        log.info("UPLOAD | Placas: %s", placas)
+        uploaded["fotoPlaca1"] = upload_base64_to_drive(placas.get("fotoPlaca1"), "placa1")
+        uploaded["fotoPlaca2"] = upload_base64_to_drive(placas.get("fotoPlaca2"), "placa2")
+        uploaded["fotoPlaca3"] = upload_base64_to_drive(placas.get("fotoPlaca3"), "placa3")
+
+        interior = fv.get("interiorCarroceria", {})
+        log.info("UPLOAD | Interior Carroceria: %s", interior)
+        uploaded["fotoInterior1"] = upload_base64_to_drive(interior.get("fotoInterior1"), "interior1")
+        uploaded["fotoInterior2"] = upload_base64_to_drive(interior.get("fotoInterior2"), "interior2")
+
+        log.info("UPLOAD | Assinaturas")
+        uploaded["assinaturaCQ"] = upload_base64_to_drive(fin.get("controleQualidadeAssinatura"), "assinatura_cq")
+        uploaded["assinaturaMotorista"] = upload_base64_to_drive(fin.get("motoristaAssinatura"), "assinatura_motorista")
+        uploaded["assinaturaVistoriador"] = upload_base64_to_drive(fin.get("vistoriadorAssinatura"), "assinatura_vistoriador")
+        log.info("UPLOAD | Upload concluído: %s", uploaded.keys())
+    except Exception as e:
+        log.exception("UPLOAD | Erro no upload de fotos/assinaturas: %s", e)
+        raise
+
+    # --------------------
+    # CONTEXTO PDF
+    # --------------------
+    try:
+        context = {
+            "data": datetime.now().strftime("%d/%m/%Y"),
+            "chegada": di.get("chegada", ""),
+            "vistoria": di.get("vistoria", ""),
+            "fim": di.get("fim", ""),
+            "ordem": di.get("numeroOrdem", ""),
+            "transportadora": di.get("transportadora", ""),
+            "operacao": di.get("operacao", ""),
+            "produto": di.get("produto", ""),
+            "ultimos_produtos": di.get("ultimosProdutos", ""),
+            "tipo_veiculo": di.get("tipoVeiculo", ""),
+            "status_final": fin.get("caminhaoLiberado", ""),
+            "placas": [
+                placas.get("placa1", ""),
+                placas.get("placa2", ""),
+                placas.get("placa3", "")
+            ],
+            "limpeza": extract_status(ii.get("limpeza")),
+            "danos": extract_status(ii.get("danos")),
+            "umidade": extract_status(ii.get("umidade")),
+            "residuos": extract_status(ii.get("residuos")),
+            "odores": extract_status(ii.get("odores")),
+            "bocas_graneleiras": extract_status(ii.get("bocasGraneleiras")),
+            "lonas": extract_status(ii.get("lonas")),
+            "chapas_mdf": extract_status(ii.get("chapasMdf")),
+            "lonas_protecao": extract_status(pc.get("lonasProtecao")),
+            "equipamentos": extract_status(pc.get("equipamentos")),
+            "tampas_laterais": extract_status(pc.get("tampasLaterais")),
+            "bau_altura_porta": extract_status(dv.get("caminhaoBau", {}).get("alturaPorta")),
+            "bau_largura_porta": extract_status(dv.get("caminhaoBau", {}).get("larguraPorta")),
+            "bau_assoalho": extract_status(dv.get("caminhaoBau", {}).get("assoalhoLiso")),
+            "container_peso": extract_status(dv.get("container", {}).get("verificacaoPeso")),
+            "observacoes": fin.get("observacoes", ""),
+            "assinaturas": {
+                "cq": {"nome": fin.get("controleQualidadeNome", ""), "imagem": uploaded["assinaturaCQ"]},
+                "motorista": {"nome": fin.get("motoristaNome", ""), "imagem": uploaded["assinaturaMotorista"]},
+                "vistoriador": {"nome": fin.get("vistoriadorNome", ""), "imagem": uploaded["assinaturaVistoriador"]}
+            }
+        }
+        log.info("PDF | Contexto criado")
+        log.debug("PDF | Contexto detalhado: %s", json.dumps(context, indent=2))
+    except Exception as e:
+        log.exception("PDF | Erro ao criar contexto do PDF: %s", e)
+        raise
+
+    # --------------------
+    # VALIDAÇÃO ASSINATURAS
+    # --------------------
+    try:
+        log.info("VALIDAR | Assinaturas")
+        validar_assinaturas(context)
+        log.info("VALIDAR | Assinaturas OK")
+    except Exception as e:
+        log.exception("VALIDAR | Erro na validação de assinaturas: %s", e)
+        raise
+
+    # --------------------
+    # GERAR PDF
+    # --------------------
+    try:
+        pdf_path = gerar_pdf_vistoria(context)
+        log.info("PDF | PDF gerado em %s", pdf_path)
+        pdf_link = upload_file_to_drive(pdf_path, f"vistoria_{di.get('numeroOrdem','')}.pdf", "application/pdf")
+        log.info("PDF | Upload do PDF concluído: %s", pdf_link)
+    except Exception as e:
+        log.exception("PDF | Erro na geração ou upload do PDF: %s", e)
+        raise
+
+    # --------------------
+    # GOOGLE SHEETS
+    # --------------------
+    try:
+        log.info("SHEETS | Preparando linha para Google Sheets")
+        linha = [
+            id_vistoria,
+            "Concluida",
+            di.get("chegada", ""),
+            di.get("vistoria", ""),
+            di.get("fim", ""),
+            di.get("numeroOrdem", ""),
+            di.get("transportadora", ""),
+            di.get("operacao", ""),
+            di.get("produto", ""),
+            di.get("ultimosProdutos", ""),
+            di.get("tipoVeiculo", ""),
+            extract_status(ii.get("limpeza")),
+            extract_status(ii.get("danos")),
+            extract_status(ii.get("umidade")),
+            extract_status(ii.get("residuos")),
+            extract_status(ii.get("odores")),
+            extract_status(ii.get("bocasGraneleiras")),
+            extract_status(ii.get("lonas")),
+            extract_status(ii.get("chapasMdf")),
+            extract_status(pc.get("lonasProtecao")),
+            extract_status(pc.get("equipamentos")),
+            extract_status(pc.get("tampasLaterais")),
+            extract_status(dv.get("caminhaoBau", {}).get("alturaPorta")),
+            extract_status(dv.get("caminhaoBau", {}).get("larguraPorta")),
+            extract_status(dv.get("caminhaoBau", {}).get("assoalhoLiso")),
+            extract_status(dv.get("container", {}).get("verificacaoPeso")),
+            fin.get("controleQualidadeNome", ""),
+            uploaded["assinaturaCQ"],
+            fin.get("motoristaNome", ""),
+            uploaded["assinaturaMotorista"],
+            fin.get("vistoriadorNome", ""),
+            uploaded["assinaturaVistoriador"],
+            placas.get("placa1", ""),
+            uploaded["fotoPlaca1"],
+            placas.get("placa2", ""),
+            uploaded["fotoPlaca2"],
+            placas.get("placa3", ""),
+            uploaded["fotoPlaca3"],
+            uploaded["fotoInterior1"],
+            uploaded["fotoInterior2"],
+            fin.get("caminhaoLiberado", ""),
+            fin.get("observacoes", ""),
+            pdf_link
+        ]
+        response = sheets_service.values().append(
+            spreadsheetId=SHEET_ID,
+            range=SHEET_TAB,
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": [linha]}
+        ).execute()
+
+        updated_range = response["updates"]["updatedRange"]
+        log.info("SHEETS | Linha criada em %s", updated_range)
+
+    except Exception as e:
+        log.exception("SHEETS | Erro ao enviar para Google Sheets: %s", e)
+        raise
+
+    log.info("PROCESSAR_VISTORIA | Vistoria concluída com sucesso | ID=%s", id_vistoria)
+
+    return {"status": "ok", "id": id_vistoria, "pdf": pdf_link}
+
+def salvar_backup_vistoria(payload: dict):
+    try:
+        di = payload.get("dadosIniciais", {})
+        fv = payload.get("fotosVistoria", {})
+
+        # tenta extrair placa de forma segura
+        placa = (
+            fv.get("placas", {}).get("placa1")
+            or fv.get("placas", {}).get("placa2")
+            or "SEM_PLACA"
+        )
+
+        placa = placa.replace(" ", "").upper()
+
+        data_agendada = di.get("vistoria") or di.get("chegada") or datetime.now().strftime("%d/%m/%Y")
+        try:
+            data_fmt = datetime.strptime(data_agendada, "%d/%m/%Y")
+        except ValueError:
+            data_fmt = datetime.strptime(data_agendada, "%d/%m/%Y %H:%M")
+
+        data_fmt = data_fmt.strftime("%Y-%m-%d")
+
+
+        filename = f"{placa}_{data_fmt}.json"
+        path = BACKUP_DIR / filename
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+        log.info("Backup da vistoria salvo em %s", path)
+
+    except Exception as e:
+        log.exception("Falha ao salvar backup da vistoria: %s", e)
+
+def worker():
+    while True:
+        payload, result_holder = vistoria_queue.get()
+        try:
+            log.info("WORKER | Recebido payload na fila: %s", payload.get("id"))
+            with app.app_context():  # 🔑 ISSO RESOLVE
+                log.info("WORKER | Salvando backup da vistoria")
+                salvar_backup_vistoria(payload)
+                log.info("WORKER | Chamando processar_vistoria")
+                result_holder["response"] = processar_vistoria(payload)
+        except Exception as e:
+            log.exception("WORKER | Erro no processamento da vistoria: %s", e)
+            result_holder["error"] = str(e)
+        finally:
+            vistoria_queue.task_done()
+
+
+Thread(target=worker, daemon=True).start()
 
 
 # -------------------
 # ENDPOINTS
 # -------------------
+@app.route("/api/status")
+def status():
+    return jsonify({
+        "status": "online",
+        "uptime_seconds": int(
+            (datetime.utcnow() - STATUS["started_at"]).total_seconds()
+        ),
+        "fila": {
+            "tamanho": vistoria_queue.qsize(),
+            "limite": vistoria_queue.maxsize
+        },
+        "processamento": {
+            "ativo": STATUS["processing"],
+            "id_atual": STATUS["current_id"]
+        },
+        "estatisticas": {
+            "processadas": STATUS["processed"],
+            "ultimo_sucesso": STATUS["last_success"],
+            "ultimo_erro": STATUS["last_error"]
+        }
+    })
+
+
 @app.get("/")
 def home():
     log.info("GET / chamada")
@@ -492,210 +864,24 @@ def pendencias():
 # -------------------
 @app.post("/vistoria")
 def receive_vistoria():
+    if not request.json:
+        return jsonify({"error": "Payload vazio"}), 400
+
+    result_holder = {}
+
     try:
-        data = request.json
+        vistoria_queue.put((request.json, result_holder), timeout=5)
+    except:
+        return jsonify({"error": "Fila cheia, tente novamente"}), 503
 
-        # --------------------
-        # DADOS INICIAIS
-        # --------------------
-        di = data.get("dadosIniciais", {})
-        ii = data.get("inspecaoInterna", {})
-        pc = data.get("protecaoCarga", {})
-        dv = data.get("detalhesVeiculo", {})
-        fv = data.get("fotosVistoria", {})
-        fin = data.get("finalizacao", {})
+    # 🔒 AGUARDA PROCESSAMENTO
+    while "response" not in result_holder and "error" not in result_holder:
+        time.sleep(0.1)
 
-        #--------------------
-        # PEGAR O ID
-        #--------------------
-        id_vistoria = data.get("id", "")
-        log.info("ID RECEBIDO NO /vistoria: %s", data.get("id"))
+    if "error" in result_holder:
+        return jsonify({"error": result_holder["error"]}), 500
 
-        # --------------------
-        # UPLOAD FOTOS / ASSINATURAS
-        # --------------------
-        uploaded = {}
-
-        # Placas
-        placas = fv.get("placas", {})
-        uploaded["fotoPlaca1"] = upload_base64_to_drive(placas.get("fotoPlaca1"), "placa1")
-        uploaded["fotoPlaca2"] = upload_base64_to_drive(placas.get("fotoPlaca2"), "placa2")
-        uploaded["fotoPlaca3"] = upload_base64_to_drive(placas.get("fotoPlaca3"), "placa3")
-
-        # Interior carroceria
-        interior = fv.get("interiorCarroceria", {})
-        uploaded["fotoInterior1"] = upload_base64_to_drive(interior.get("fotoInterior1"), "interior1")
-        uploaded["fotoInterior2"] = upload_base64_to_drive(interior.get("fotoInterior2"), "interior2")
-
-        # Assinaturas
-        uploaded["assinaturaCQ"] = upload_base64_to_drive(fin.get("controleQualidadeAssinatura"), "assinatura_cq")
-        uploaded["assinaturaMotorista"] = upload_base64_to_drive(fin.get("motoristaAssinatura"), "assinatura_motorista")
-        uploaded["assinaturaVistoriador"] = upload_base64_to_drive(fin.get("vistoriadorAssinatura"), "assinatura_vistoriador")
-
-        # --------------------
-        # MONTAR CONTEXTO PARA PDF
-        # --------------------
-        context = {
-            # Metadados
-            "data": datetime.now().strftime("%d/%m/%Y"),
-            "chegada": di.get("chegada", ""),
-            "vistoria": di.get("vistoria", ""),
-            "fim": di.get("fim", ""),
-            "ordem": di.get("numeroOrdem", ""),
-            "transportadora": di.get("transportadora", ""),
-            "operacao": di.get("operacao", ""),
-            "produto": di.get("produto", ""),
-            "ultimos_produtos": di.get("ultimosProdutos", ""),
-            "tipo_veiculo": di.get("tipoVeiculo", ""),
-            "status_final": fin.get("caminhaoLiberado", ""),
-
-            # Placas
-            "placas": [
-                placas.get("placa1", ""),
-                placas.get("placa2", ""),
-                placas.get("placa3", "")
-            ],
-
-            # Resultados inspeção interna
-            "limpeza": extract_status(ii.get("limpeza")),
-            "danos": extract_status(ii.get("danos")),
-            "umidade": extract_status(ii.get("umidade")),
-            "residuos": extract_status(ii.get("residuos")),
-            "odores": extract_status(ii.get("odores")),
-            "bocas_graneleiras": extract_status(ii.get("bocasGraneleiras")),
-            "lonas": extract_status(ii.get("lonas")),
-            "chapas_mdf": extract_status(ii.get("chapasMdf")),
-
-            # Proteção de carga
-            "lonas_protecao": extract_status(pc.get("lonasProtecao")),
-            "equipamentos": extract_status(pc.get("equipamentos")),
-            "tampas_laterais": extract_status(pc.get("tampasLaterais")),
-
-            # Condicionais
-            "bau_altura_porta": extract_status(dv.get("caminhaoBau", {}).get("alturaPorta")),
-            "bau_largura_porta": extract_status(dv.get("caminhaoBau", {}).get("larguraPorta")),
-            "bau_assoalho": extract_status(dv.get("caminhaoBau", {}).get("assoalhoLiso")),
-            "container_peso": extract_status(dv.get("container", {}).get("verificacaoPeso")),
-
-            # Observações
-            "observacoes": fin.get("observacoes", ""),
-
-            # Assinaturas
-            "assinaturas": {
-                "cq": {
-                    "nome": fin.get("controleQualidadeNome", ""),
-                    "imagem": uploaded.get("assinaturaCQ", "")
-                },
-                "motorista": {
-                    "nome": fin.get("motoristaNome", ""),
-                    "imagem": uploaded.get("assinaturaMotorista", "")
-                },
-                "vistoriador": {
-                    "nome": fin.get("vistoriadorNome", ""),
-                    "imagem": uploaded.get("assinaturaVistoriador", "")
-                }
-            }
-        }
-
-        log.info("Contexto PDF: %s", context)
-
-        # --------------------
-        # VALIDAÇÃO OBRIGATÓRIA DE ASSINATURAS
-        # --------------------
-        validar_assinaturas(context)
-
-        # --------------------
-        # GERAR PDF
-        # --------------------
-        pdf_path = gerar_pdf_vistoria(context)
-        log.info("PDF gerado: %s | Existe? %s", pdf_path, os.path.exists(pdf_path))
-
-        pdf_link = upload_file_to_drive(pdf_path, f"vistoria_{di.get('numeroOrdem','')}.pdf", "application/pdf")
-
-        # --------------------
-        # SALVAR NO GOOGLE SHEETS
-        # --------------------
-        linha = [
-            id_vistoria, 
-            "CONCLUIDO",  # Colunas A e B vazias
-            di.get("chegada", ""),
-            di.get("vistoria", ""),
-            di.get("fim", ""),
-            di.get("numeroOrdem", ""),
-            di.get("transportadora", ""),
-            di.get("operacao", ""),
-            di.get("produto", ""),
-            di.get("ultimosProdutos", ""),
-            di.get("tipoVeiculo", ""),
-
-            # Inspeção interna
-            extract_status(ii.get("limpeza")),
-            extract_status(ii.get("danos")),
-            extract_status(ii.get("umidade")),
-            extract_status(ii.get("residuos")),
-            extract_status(ii.get("odores")),
-            extract_status(ii.get("bocasGraneleiras")),
-            extract_status(ii.get("lonas")),
-            extract_status(ii.get("chapasMdf")),
-
-            # Proteção de carga
-            extract_status(pc.get("lonasProtecao")),
-            extract_status(pc.get("equipamentos")),
-            extract_status(pc.get("tampasLaterais")),
-
-            # Condicionais
-            extract_status(dv.get("caminhaoBau", {}).get("alturaPorta")),
-            extract_status(dv.get("caminhaoBau", {}).get("larguraPorta")),
-            extract_status(dv.get("caminhaoBau", {}).get("assoalhoLiso")),
-            extract_status(dv.get("container", {}).get("verificacaoPeso")),
-
-            # Nomes e assinaturas
-            fin.get("controleQualidadeNome", ""),
-            uploaded.get("assinaturaCQ", ""),
-            fin.get("motoristaNome", ""),
-            uploaded.get("assinaturaMotorista", ""),
-            fin.get("vistoriadorNome", ""),
-            uploaded.get("assinaturaVistoriador", ""),
-
-            # Placas e fotos
-            placas.get("placa1", ""),
-            uploaded.get("fotoPlaca1", ""),
-            placas.get("placa2", ""),
-            uploaded.get("fotoPlaca2", ""),
-            placas.get("placa3", ""),
-            uploaded.get("fotoPlaca3", ""),
-
-            # Interior fotos
-            uploaded.get("fotoInterior1", ""),
-            uploaded.get("fotoInterior2", ""),
-
-            # Final
-            fin.get("caminhaoLiberado", ""),
-            fin.get("observacoes", ""),
-            pdf_link
-        ]
-
-        log.info("PDF link salvo no Sheets: %s", linha[-1])
-        log.info("Total de colunas na linha: %d", len(linha))
-
-        sheets_service.values().append(
-            spreadsheetId=SHEET_ID,
-            range=SHEET_TAB,
-            valueInputOption="RAW",
-            insertDataOption="INSERT_ROWS",
-            body={"values": [linha]}
-        ).execute()
-
-        log.info("Linha inserida no Sheets com sucesso")
-
-        return jsonify({"status": "ok", "pdf": pdf_link}), 200
-
-    except ValueError as ve:
-        log.error(f"Erro de validação: {ve}")
-        return jsonify({"erro": str(ve)}), 400
-    except Exception as e:
-        log.exception("Erro ao processar vistoria")
-        return jsonify({"error": str(e)}), 500
+    return jsonify(result_holder["response"]), 200
 
 @app.post("/cancelar")
 def cancelar_vistoria():
@@ -718,7 +904,7 @@ def cancelar_vistoria():
             spreadsheetId=SHEET_ID,
             range=f"{SHEET_TAB}!B{linha}",  # STATUS
             valueInputOption="RAW",
-            body={"values": [["CANCELADO"]]}
+            body={"values": [["Cancelada"]]}
         ).execute()
 
         sheets_service.values().update(
@@ -747,10 +933,16 @@ def cancelar_vistoria():
         log.exception("Erro ao cancelar vistoria")
         return jsonify({"error": str(e)}), 500
 
+@app.before_request
+def log_request():
+    print(">>>", request.method, request.path)
+
 
 # --------------------------------------------------------------------------
 # RUN
 # --------------------------------------------------------------------------
+# Gunicorn é o responsável por iniciar a aplicação
 if __name__ == "__main__":
-    log.info("Inicializando API...")
-    app.run(host="192.168.53.193", port=5000, debug=True)
+   log.info("SUBINDO API FLASK (DEV)")
+   app.run(host="0.0.0.0", port=5000, debug=True)
+

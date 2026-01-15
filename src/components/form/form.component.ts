@@ -198,7 +198,7 @@ chegada: new FormControl('', {
 }
 async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
   try {
-    const response = await fetch('http://192.168.53.193:5000/pendencias');
+    const response = await fetch('/api/pendencias');
 
     if (!response.ok) {
       console.error('Erro ao buscar pendências');
@@ -902,7 +902,7 @@ async onSubmit() {
   window.scrollTo(0, 0);
 
   // Envia os dados em background (fire-and-forget)
-  fetch('http://192.168.53.193:5000/vistoria', {
+  fetch('/api/vistoria', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

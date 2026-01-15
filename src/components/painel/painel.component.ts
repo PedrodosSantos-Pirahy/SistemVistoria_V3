@@ -46,7 +46,8 @@ export class PainelComponent implements OnInit {
    * Output já existente no componente.
    * NÃO foi removido para não quebrar integrações existentes.
    */
-  readonly inspectionSelected = output<string>();
+  readonly inspectionSelected = output<Inspection>();
+
 
   /* =========================================================
      ESTADOS ADICIONADOS PARA O MODAL (NÃO EXISTIAM ANTES)
@@ -79,7 +80,7 @@ export class PainelComponent implements OnInit {
 
     try {
      
-      const response = await fetch("http://192.168.53.193:5000/pendencias", {
+      const response = await fetch("/api/pendencias", {
         method: 'GET'
       });
 
@@ -139,16 +140,11 @@ export class PainelComponent implements OnInit {
     }
   }
 selectInspection(inspection: Inspection) {
-  console.log('PAINEL EMITINDO:', inspection.placa);
   if (this.showDecisionModal()) return;
 
-  this.inspectionSelected.emit(inspection.placa);
+  console.log('PAINEL EMITINDO:', inspection);
+  this.inspectionSelected.emit(inspection);
 }
-
-
-
-  
-
 
 abrirCancelamento(event: Event, inspection: Inspection) {
   event.preventDefault();
@@ -183,7 +179,7 @@ abrirCancelamento(event: Event, inspection: Inspection) {
 
   console.log('ENVIANDO CANCELAMENTO:', payload);
 
-  const response = await fetch('http://192.168.53.193:5000/cancelar', {
+  const response = await fetch('/api/cancelar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)

@@ -27,7 +27,8 @@
   </app-painel>
 } @else {
   <app-form
-    [placa]="selectedPlaca()"
+    [placa]="selectedInspection()?.placa"
+    [vistoriaId]="selectedInspection()?.id"
     (finished)="goBack()">
   </app-form>
 }

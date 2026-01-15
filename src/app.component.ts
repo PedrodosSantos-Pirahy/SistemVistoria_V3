@@ -16,34 +16,40 @@ export class AppComponent {
   // controla qual tela aparece (mesma rota)
   readonly view = signal<'list' | 'form'>('list');
 
-  // usado quando abre o formulário de vistoria
-  readonly selectedPlaca = signal<string | null>(null);
+  // vistoria selecionada (ID técnico + placa para exibição)
+  readonly selectedInspection = signal<{
+  placa: string;
+  id: string;
+} | null>(null);
+
 
   // navegação pela navbar
-  setView(view: 'list' ): void {
-    this.selectedPlaca.set(null);
+  setView(view: 'list'): void {
+    this.selectedInspection.set(null);
     this.view.set(view);
   }
-  placaSelecionada: string | null = null;
-
-onPlacaSelecionada = (placa: string) => {
-  this.placaSelecionada = placa;
-};
-
-  
-
 
   // chamado pelo Painel ao clicar numa vistoria
-  onInspectionSelected(placa: string) {
-  console.log('APP RECEBEU:', placa);
-  this.selectedPlaca.set(placa);
+  onInspectionSelected(inspection: { placa: string; id: string }) {
+  console.log('APP RECEBEU:', inspection);
+
+  this.selectedInspection.set({
+    placa: inspection.placa,
+    id: inspection.id
+  });
+
   this.view.set('form');
 }
 
 
+  // usado apenas para exibição no template (placa)
+  get placaSelecionada(): string | null {
+    return this.selectedInspection()?.placa ?? null;
+  }
+
   // voltar do formulário para o painel
   goBack(): void {
-    this.selectedPlaca.set(null);
+    this.selectedInspection.set(null);
     this.view.set('list');
   }
 }

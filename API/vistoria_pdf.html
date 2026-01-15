@@ -91,6 +91,27 @@
             padding: 0.25rem 0.5rem;
             color: #334155;
         }
+        /* Ajustar Layout para Báu */
+        body.bau {
+            font-size: 10px;
+        }
+
+        body.bau .inspection-table td,
+        body.bau .inspection-table th {
+            padding: 0.18rem 0.35rem;
+        }
+
+        body.bau .report-section {
+            margin-top: 0.4rem;
+        }
+
+        body.bau .signature-area {
+            height: 50px;
+        }
+
+        body.bau .observations-box p {
+            min-height: 12px;
+        }
 
         /* --- Dados Gerais Grid --- */
         .data-grid {
@@ -249,7 +270,7 @@
         }
     </style>
 </head>
-<body>
+<body class="{% if tipo_veiculo in ['Baú','Bau'] %}bau{% endif %}">
     <div class="report-container">
 
         <!-- HEADER -->
@@ -268,8 +289,8 @@
         <section class="report-section">
             <h3 class="section-title">Dados Gerais da Vistoria</h3>
             <div class="data-grid">
-                <div><strong>Hora Chegada:</strong> {{ chegada }}</div>
-                <div><strong>Hora Vistoria:</strong> {{ vistoria }}</div>
+                <div><strong>Chegada:</strong> {{ chegada }}</div>
+                <div><strong>Vistoria:</strong> {{ vistoria }}</div>
                 <div><strong>Nº Ordem:</strong> {{ ordem }}</div>
                 <div class="col-span-3"><strong>Transportadora:</strong> {{ transportadora }}</div>
                 <div class="col-span-3">
