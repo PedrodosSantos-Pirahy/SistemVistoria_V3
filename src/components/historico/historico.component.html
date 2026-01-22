@@ -1,0 +1,81 @@
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-3xl font-extrabold text-gray-900">Histórico de Vistorias</h1>
+    <p class="text-sm text-gray-500 mt-1">Consulte todas as vistorias registradas</p>
+  </div>
+
+</div>
+
+<!-- Filtros -->
+<div class="bg-white p-4 rounded-xl shadow mb-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <input
+    type="text"
+    placeholder="Buscar por placa"
+    class="border rounded-md p-2 focus:ring-2 focus:ring-indigo-500"
+    (input)="buscaPlaca.set($any($event.target).value)" />
+
+  <select
+    class="border rounded-md p-2 focus:ring-2 focus:ring-indigo-500"
+    (change)="statusSelecionado.set($any($event.target).value)">
+    <option value="Todos">Todos os status</option>
+    <option value="Expirado">Expirado</option>
+    <option value="Concluida">Concluída</option>
+  </select>
+
+  <button class="bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold">
+    Aplicar filtros
+  </button>
+</div>
+<!-- Cards resumo responsivos e horizontais -->
+<div class="flex flex-wrap justify-center gap-4 mb-6">
+  <div class="bg-white p-4 rounded-xl shadow hover:shadow-lg transition-shadow duration-300 flex-1 min-w-[120px] max-w-[180px] flex flex-col items-center text-center">
+    <p class="text-sm text-gray-500">Total</p>
+    <p class="text-2xl sm:text-3xl font-bold text-gray-900">{{ historicoFiltrado().length }}</p>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow hover:shadow-lg transition-shadow duration-300 flex-1 min-w-[120px] max-w-[180px] flex flex-col items-center text-center">
+    <p class="text-sm text-gray-500">Expiradas</p>
+    <p class="text-2xl sm:text-3xl font-bold text-red-600">{{ totalExpiradas() }}</p>
+  </div>
+
+  <div class="bg-white p-4 rounded-xl shadow hover:shadow-lg transition-shadow duration-300 flex-1 min-w-[120px] max-w-[180px] flex flex-col items-center text-center">
+    <p class="text-sm text-gray-500">Concluídas</p>
+    <p class="text-2xl sm:text-3xl font-bold text-green-600">{{ totalConcluidas() }}</p>
+  </div>
+</div>
+
+<!-- Tabela de histórico -->
+<div class="bg-white rounded-xl shadow overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left text-sm font-semibold">Placa</th>
+        <th class="px-4 py-3 text-left text-sm font-semibold">Data</th>
+        <th class="px-4 py-3 text-left text-sm font-semibold">Hora</th>
+        <th class="px-4 py-3 text-left text-sm font-semibold">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      @for (item of historicoFiltrado(); track item.placa) {
+        <tr class="hover:bg-gray-50 transition-colors duration-200">
+          <td class="px-4 py-3 font-medium">{{ item.placa }}</td>
+          <td class="px-4 py-3">{{ item.data }}</td>
+          <td class="px-4 py-3">{{ item.hora }}</td>
+          <td
+            class="px-4 py-3 font-semibold"
+            [class.text-red-600]="item.status === 'Expirado'"
+            [class.text-green-600]="item.status === 'Concluida'">
+            {{ item.status }}
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+<!-- Paginação -->
+<div class="flex justify-center items-center gap-4 mt-6">
+  <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Anterior</button>
+  <span class="text-sm text-gray-600">Página 1 de 1</span>
+  <button class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300">Próxima</button>
+</div>

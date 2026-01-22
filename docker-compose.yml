@@ -6,8 +6,10 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - GOOGLE_SERVICE_ACCOUNT_FILE=service-account.json
+      - GOOGLE_SERVICE_ACCOUNT_FILE=/app/service-account.json
       - SPREADSHEET_ID=1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw
+    volumes:
+      - ./service-account.json:/app/service-account.json:ro
     restart: always
 
   frontend:

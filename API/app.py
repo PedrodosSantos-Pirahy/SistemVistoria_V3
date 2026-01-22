@@ -343,28 +343,40 @@ def get_agend_v2_columns(filter_date=None):
         if not values:
             return []
 
-        hoje_str = filter_date or now.strftime("%d/%m/%Y")
+        
         selected_data = []
 
         for row in values[1:]:  # pula cabeçalho
-            date_value = row[1] if len(row) > 1 else ""
-            hora = row[2] if len(row) > 2 else ""
-            status = row[10] if len(row) > 10 else ""
-            id_vistoria = row[24] if len(row) > 24 else ""
-            placa = row[25] if len(row) > 25 else ""
+            date_value = row[1] if len(row) > 1 and isinstance(row[1], str) else ""     #B
+            hora = row[2] if len(row) > 2 else ""           #C
+            pre_ordem = row[4] if len(row) > 4 else ""      #E
+            transportadora = row[5] if len(row) > 5 else "" #F
+            status = row[10] if len(row) > 10 else ""       #K
+            id_vistoria = row[24] if len(row) > 24 else ""  #Y
+            placa = row[25] if len(row) > 25 else ""        #Z
 
             status_normalizado = status.strip().lower()
+            if not date_value:
+                continue 
+
+            categoria_data = classificar_data(date_value)
 
             if (
-                date_value == hoje_str
-                and status_normalizado not in ("concluida", "cancelada")
+                status_normalizado not in ("concluida", "cancelada")
+                and categoria_data != "indefinida"
+                
             ):
                 selected_data.append({
+                    "data": date_value,
+                    "categoria_data": categoria_data,  # 👈 AQUI
                     "hora": hora,
                     "placa": placa,
                     "status": status,
-                    "id": id_vistoria
+                    "id": id_vistoria,
+                    "pre_ordem": pre_ordem,
+                    "transportadora": transportadora
                 })
+
 
 
         selected_data.sort(key=lambda x: x.get("hora", ""))
@@ -380,7 +392,33 @@ def get_agend_v2_columns(filter_date=None):
         log.exception("Erro Sheets pendencias: %s", e)
         return None
 
+def classificar_data(data_str: str) -> str:
+    if not data_str or not isinstance(data_str, str):
+        return "indefinida"
 
+    data_str = data_str.strip()
+
+    formatos = [
+        "%d/%m/%Y",
+        "%d/%m/%Y %H:%M",
+        "%Y-%m-%d"
+    ]
+
+    for fmt in formatos:
+        try:
+            data = datetime.strptime(data_str, fmt).date()
+            hoje = datetime.now().date()
+
+            if data < hoje:
+                return "Datas Anteriores"
+            elif data == hoje:
+                return "Data Atual"
+            else:
+                return "Datas Futuras"
+        except ValueError:
+            continue
+
+    return "indefinida"
 
 def extract_status(obj):
     return obj.get("status", "") if obj else ""
@@ -455,7 +493,7 @@ def gerar_pdf_vistoria(context):
     
 # --- FUNÇÃO DE VALIDAÇÃO (fora de qualquer @app.post) ---
 def validar_assinaturas(context):
-    obrigatorias = ["cq", "motorista", "vistoriador"]
+    obrigatorias = ["motorista", "vistoriador"]
     assinaturas = context.get("assinaturas")
     if not assinaturas:
         raise ValueError("Contexto não contém 'assinaturas'.")
@@ -609,7 +647,6 @@ def processar_vistoria(data: dict) -> dict:
         uploaded["fotoInterior2"] = upload_base64_to_drive(interior.get("fotoInterior2"), "interior2")
 
         log.info("UPLOAD | Assinaturas")
-        uploaded["assinaturaCQ"] = upload_base64_to_drive(fin.get("controleQualidadeAssinatura"), "assinatura_cq")
         uploaded["assinaturaMotorista"] = upload_base64_to_drive(fin.get("motoristaAssinatura"), "assinatura_motorista")
         uploaded["assinaturaVistoriador"] = upload_base64_to_drive(fin.get("vistoriadorAssinatura"), "assinatura_vistoriador")
         log.info("UPLOAD | Upload concluído: %s", uploaded.keys())
@@ -655,7 +692,6 @@ def processar_vistoria(data: dict) -> dict:
             "container_peso": extract_status(dv.get("container", {}).get("verificacaoPeso")),
             "observacoes": fin.get("observacoes", ""),
             "assinaturas": {
-                "cq": {"nome": fin.get("controleQualidadeNome", ""), "imagem": uploaded["assinaturaCQ"]},
                 "motorista": {"nome": fin.get("motoristaNome", ""), "imagem": uploaded["assinaturaMotorista"]},
                 "vistoriador": {"nome": fin.get("vistoriadorNome", ""), "imagem": uploaded["assinaturaVistoriador"]}
             }
@@ -721,8 +757,8 @@ def processar_vistoria(data: dict) -> dict:
             extract_status(dv.get("caminhaoBau", {}).get("larguraPorta")),
             extract_status(dv.get("caminhaoBau", {}).get("assoalhoLiso")),
             extract_status(dv.get("container", {}).get("verificacaoPeso")),
-            fin.get("controleQualidadeNome", ""),
-            uploaded["assinaturaCQ"],
+            "",
+            "",
             fin.get("motoristaNome", ""),
             uploaded["assinaturaMotorista"],
             fin.get("vistoriadorNome", ""),
@@ -741,7 +777,7 @@ def processar_vistoria(data: dict) -> dict:
         ]
         response = sheets_service.values().append(
             spreadsheetId=SHEET_ID,
-            range=SHEET_TAB,
+            range=f"{SHEET_TAB}!A2:A5000",            
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={"values": [linha]}
@@ -909,14 +945,14 @@ def cancelar_vistoria():
 
         sheets_service.values().update(
             spreadsheetId=SHEET_ID,
-            range=f"{SHEET_TAB}!AR{linha}",  # MOTIVO
+            range=f"{SHEET_TAB}!AP{linha}",  # MOTIVO/Observação
             valueInputOption="RAW",
             body={"values": [[motivo]]}
         ).execute()
 
         sheets_service.values().update(
             spreadsheetId=SHEET_ID,
-            range=f"{SHEET_TAB}!AS{linha}",  # VISTORIADOR
+            range=f"{SHEET_TAB}!AE{linha}",  # VISTORIADOR
             valueInputOption="RAW",
             body={"values": [[nome]]}
         ).execute()
@@ -942,7 +978,17 @@ def log_request():
 # RUN
 # --------------------------------------------------------------------------
 # Gunicorn é o responsável por iniciar a aplicação
+#if __name__ == "__main__":
+#   log.info("SUBINDO API FLASK (DEV)")
+#   HOST = os.getenv("API_HOST", "127.0.0.1")
+#   PORT = int(os.getenv("API_PORT", 5000))
+#   
+#   app.run(host=HOST, port=PORT)
+
 if __name__ == "__main__":
    log.info("SUBINDO API FLASK (DEV)")
-   app.run(host="0.0.0.0", port=5000, debug=True)
+   HOST = os.getenv("API_HOST", "192.168.53.193")
+   PORT = int(os.getenv("API_PORT", 5000))
+   
+   app.run(host=HOST, port=PORT)
 

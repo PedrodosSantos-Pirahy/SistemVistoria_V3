@@ -1,6 +1,7 @@
 import { Component, ChangeDetectionStrategy, signal } from '@angular/core';
 import { FormComponent } from './components/form/form.component';
 import { PainelComponent } from './components/painel/painel.component';
+import { HistoricoComponent } from './components/historico/historico.component';
 
 @Component({
   selector: 'app-root',
@@ -9,12 +10,13 @@ import { PainelComponent } from './components/painel/painel.component';
   imports: [
     FormComponent,
     PainelComponent,
+    HistoricoComponent,
   ]
 })
 export class AppComponent {
 
   // controla qual tela aparece (mesma rota)
-  readonly view = signal<'list' | 'form'>('list');
+  readonly view = signal<'list' | 'form' | 'historico'>('list');
 
   // vistoria selecionada (ID técnico + placa para exibição)
   readonly selectedInspection = signal<{
@@ -46,7 +48,9 @@ export class AppComponent {
   get placaSelecionada(): string | null {
     return this.selectedInspection()?.placa ?? null;
   }
-
+  irParaHistorico() {
+    this.view.set('historico');
+  }
   // voltar do formulário para o painel
   goBack(): void {
     this.selectedInspection.set(null);

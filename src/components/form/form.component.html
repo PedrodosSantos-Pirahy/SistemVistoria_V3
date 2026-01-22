@@ -550,48 +550,6 @@
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-        <!-- CONTROLE DE QUALIDADE -->
-        <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">
-                Nome Controle de Qualidade <span class="text-red-500">*</span>
-            </label>
-            <input type="text"
-                id="controleQualidadeNome"
-                formControlName="controleQualidadeNome"
-                class="block w-full px-4 py-2 border rounded-md shadow-sm"
-                [class.border-red-500]="form.get('finalizacao.controleQualidadeNome')?.invalid &&
-                                        form.get('finalizacao.controleQualidadeNome')?.touched">
-
-            <label class="block text-sm font-medium text-gray-700 pt-2">
-                Assinatura Controle de Qualidade <span class="text-red-500">*</span>
-            </label>
-
-            @if(!form.get('finalizacao.controleQualidadeAssinatura')?.value) {
-                <button type="button"
-                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
-                    (click)="openSignatureFullscreen('cq')">Assinar CQ</button>
-            }
-
-            @if(form.get('finalizacao.controleQualidadeAssinatura')?.value) {
-                <div class="relative">
-                    <canvas #controleQualidadeCanvas
-                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
-
-                    <button type="button"
-                        (click)="openSignatureFullscreen('cq')"
-                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
-                               text-gray-700 px-2 py-1 rounded">
-                        Reassinar
-                    </button>
-                </div>
-            }
-
-            @if(form.get('finalizacao.controleQualidadeAssinatura')?.invalid &&
-                form.get('finalizacao.controleQualidadeAssinatura')?.touched) {
-                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
-            }
-        </div>
-
         <!-- MOTORISTA -->
         <div class="space-y-2">
             <label class="block text-sm font-medium text-gray-700">
@@ -637,7 +595,7 @@
         <!-- VISTORIADOR -->
         <div class="space-y-2">
             <label class="block text-sm font-medium text-gray-700">
-                Nome Vistoriador <span class="text-red-500">*</span>
+                Nome Vistoriador/Qualidade <span class="text-red-500">*</span>
             </label>
             <input type="text"
                 id="vistoriadorNome"

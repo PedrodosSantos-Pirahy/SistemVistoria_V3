@@ -1,41 +1,60 @@
 <div class="min-h-screen bg-gray-50 flex flex-col items-center">
+
+  <!-- Header -->
   <header class="w-full bg-white shadow-md p-4">
-    
     <div class="max-w-4xl mx-auto flex items-center">
-      @if (view() === 'form') {
-        <button (click)="goBack()" class="mr-4 p-2 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-          </svg>
+      @if (view() !== 'list') {
+        <button (click)="goBack()" class="mr-4 p-2 rounded-full hover:bg-gray-200">
+          ⬅
         </button>
       }
       <div>
         <h1 class="text-2xl font-bold text-gray-800">
-            {{ view() === 'list' ? 'Vistorias Pendentes' : 'Formulário de Vistoria' }}
+          @if (view() === 'list') {
+            Vistorias Pendentes
+          } @else if (view() === 'form') {
+            Formulário de Vistoria
+          } @else {
+            Histórico de Vistorias
+          }
         </h1>
         <p class="text-gray-600">
-            {{ view() === 'list' ? 'Selecione uma vistoria para iniciar' : 'Preencha todos os campos' }}
+          @if (view() === 'list') {
+            Selecione uma vistoria para iniciar
+          } @else if (view() === 'form') {
+            Preencha todos os campos
+          } @else {
+            Consulte todas as vistorias registradas
+          }
         </p>
       </div>
     </div>
   </header>
 
+  <!-- Main -->
   <main class="w-full max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 flex-grow">
+
     @if (view() === 'list') {
-  <app-painel
-    (inspectionSelected)="onInspectionSelected($event)">
-  </app-painel>
-} @else {
-  <app-form
-    [placa]="selectedInspection()?.placa"
-    [vistoriaId]="selectedInspection()?.id"
-    (finished)="goBack()">
-  </app-form>
-}
+      <app-painel
+        (inspectionSelected)="onInspectionSelected($event)"
+        (verTodas)="view.set('historico')">
+      </app-painel>
+
+    } @else if (view() === 'form') {
+      <app-form
+        [placa]="selectedInspection()?.placa"
+        [vistoriaId]="selectedInspection()?.id"
+        (finished)="goBack()">
+      </app-form>
+    } @else {
+      <app-historico></app-historico>
+    }
 
   </main>
-  
+
+  <!-- Footer -->
   <footer class="w-full text-center p-4 text-gray-500 text-sm">
-    <p>&copy; 2025 App de Vistorias Pirahy. Todos os direitos reservados.</p>
+    <p>&copy; 2025 Site de Vistorias Pirahy. Todos os direitos reservados.</p>
   </footer>
+
 </div>

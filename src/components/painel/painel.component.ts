@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, Input, output, signal, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, Input, output, signal, OnInit, computed } from '@angular/core';
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -8,9 +8,13 @@ import { CommonModule } from '@angular/common';
  */
 interface Inspection {
   placa: string;
+  pre_ordem: string;
+  transportadora: string;
   status: string;
   id: string;
+  categoria_data: string;
 }
+
 
 @Component({
   selector: 'app-painel',
@@ -31,6 +35,10 @@ export class PainelComponent implements OnInit {
    * Utiliza signal para melhor performance com OnPush
    */
   readonly inspections = signal<Inspection[]>([]);
+
+
+  // PainelComponent
+  readonly verTodas = output<void>();
 
   /**
    * Controla o estado de carregamento da tela
@@ -60,12 +68,24 @@ export class PainelComponent implements OnInit {
   resposta: 'sim' | 'nao' | null = null;
   selectedInspection = signal<Inspection | null>(null);
 
-
+  private irHistorico = signal(false);
   constructor(private router: Router) {}
 
   ngOnInit(): void {
+  this.fetchInspections();
+
+  // 🔁 força atualização a cada 10 segundos
+  this.pollingInterval = window.setInterval(() => {
     this.fetchInspections();
+  }, 10000); // 10s (pode baixar pra 5s)
+}
+
+  ngOnDestroy(): void {
+  if (this.pollingInterval) {
+    clearInterval(this.pollingInterval);
   }
+}
+
 
   /**
    * Busca as vistorias pendentes no backend (Python)
@@ -79,8 +99,10 @@ export class PainelComponent implements OnInit {
     this.error.set(null);
 
     try {
-     
+     /* Metodo de produção
       const response = await fetch("/api/pendencias", {
+      */ 
+      const response = await fetch("http://192.168.53.193:5000/pendencias", {
         method: 'GET'
       });
 
@@ -116,7 +138,10 @@ export class PainelComponent implements OnInit {
     return {
       placa: item.placa,
       status: item.status,
-      id: item.id
+      id: item.id,
+      pre_ordem: item.pre_ordem,
+      transportadora: item.transportadora,
+      categoria_data: item.categoria_data?.trim()
     };
   })
   .filter((item): item is Inspection => item !== null);
@@ -139,11 +164,50 @@ export class PainelComponent implements OnInit {
       this.loading.set(false);
     }
   }
+
+  reloadPage() {
+  window.location.reload();
+}
+
+tipoFiltro = signal<
+  'Data Atual' | 'Datas Anteriores' | 'Datas Futuras' | 'Todas as Datas' >('Data Atual');
+
+
+get vistoriasFiltradas(): Inspection[] {
+  const lista = this.inspections();
+  const filtro = this.tipoFiltro();
+
+  if (filtro === 'Todas as Datas') {
+    return lista;
+  }
+
+  return lista.filter(v => v.categoria_data === filtro);
+}
+
+
+
+tituloFiltro = computed(() => {
+  switch (this.tipoFiltro()) {
+    case 'Data Atual': return 'Hoje';
+    case 'Datas Anteriores': return 'Datas Anteriores';
+    case 'Datas Futuras': return 'Datas Futuras';
+    default: return '';
+  }
+});
+
+
+
+private pollingInterval!: number;
+
+
 selectInspection(inspection: Inspection) {
   if (this.showDecisionModal()) return;
 
   console.log('PAINEL EMITINDO:', inspection);
   this.inspectionSelected.emit(inspection);
+}
+irParaHistorico() {
+  this.verTodas.emit();
 }
 
 abrirCancelamento(event: Event, inspection: Inspection) {
@@ -161,6 +225,7 @@ abrirCancelamento(event: Event, inspection: Inspection) {
     this.selectedPlaca.set(null);
     this.nomeCancelamento = '';
     this.motivo = '';
+
   }
 
   async confirmarCancelamento() {
@@ -179,7 +244,7 @@ abrirCancelamento(event: Event, inspection: Inspection) {
 
   console.log('ENVIANDO CANCELAMENTO:', payload);
 
-  const response = await fetch('/api/cancelar', {
+  const response = await fetch('http://192.168.53.193:5000/cancelar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
@@ -188,9 +253,14 @@ abrirCancelamento(event: Event, inspection: Inspection) {
   const result = await response.json();
 
   if (!response.ok) {
-    throw new Error(result.error || 'Erro ao cancelar');
-  }
+    alert(result.error || 'Erro ao cancelar');
+  return;
+}
+
 
   this.fecharModal();
-}
+
+  
+ 
+};
 }

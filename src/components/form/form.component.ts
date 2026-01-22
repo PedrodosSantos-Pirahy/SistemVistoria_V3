@@ -13,7 +13,10 @@ interface FormStep {
   name: string;
   groups: string[];
 }
-
+interface OrdemTransportadora {
+  pre_ordem: string;
+  transportadora: string;
+  }
 @Component({
   selector: 'app-form',
   templateUrl: './form.component.html',
@@ -24,6 +27,9 @@ export class FormComponent implements OnDestroy {
 
   placa = input<string | null>(null);
   vistoriaId = signal<string | null>(null);
+  
+
+
 
 
 @ViewChild('controleQualidadeCanvas') controleQualidadeCanvas!: ElementRef<HTMLCanvasElement>;
@@ -32,7 +38,6 @@ export class FormComponent implements OnDestroy {
 @ViewChild('fullscreenSignatureCanvas') fullscreenCanvas!: ElementRef<HTMLCanvasElement>;
 
 
-  private padCQ: any = null;
   private padMotorista: any = null;
 
 
@@ -152,8 +157,6 @@ chegada: new FormControl('', {
       }),
     }),
     finalizacao: new FormGroup({
-      controleQualidadeNome: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-      controleQualidadeAssinatura: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
       motoristaNome: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
       motoristaAssinatura: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
       vistoriadorNome: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -186,7 +189,7 @@ chegada: new FormControl('', {
   readonly interior1Preview = signal<string | null>(null);
   readonly interior2Preview = signal<string | null>(null);
   readonly showToast = signal(false);
-  signatureFor: 'cq' | 'motorista' | 'vistoriador' | null = null;
+  signatureFor: 'motorista' | 'vistoriador' | null = null;
 
    
 
@@ -196,9 +199,55 @@ chegada: new FormControl('', {
   console.log('selectedPlaca:', placa);  // <-- aqui você vê o valor
   return placa;
 }
+async buscarOrdemETransportadoraPorPlaca(
+  placaForm: string
+): Promise<OrdemTransportadora | null> {
+  try {
+    const response = await fetch('http://192.168.53.193:5000/pendencias');
+
+    if (!response.ok) {
+      console.error('Erro ao buscar pendências');
+      return null;
+    }
+
+    const data = await response.json();
+    const pendentes = Array.isArray(data?.pendentes)
+      ? data.pendentes
+      : [];
+
+    const placaNormalizada = placaForm.trim().toUpperCase();
+
+    const encontrada = pendentes.find((p: any) => {
+      if (!p?.placa) return false;
+
+      const placaApi = p.placa
+        .split('/')
+        .pop()
+        ?.trim()
+        .toUpperCase();
+
+      return placaApi === placaNormalizada;
+    });
+
+    if (!encontrada) {
+      console.warn('❌ Pendência não encontrada:', placaNormalizada);
+      return null;
+    }
+
+    return {
+      pre_ordem: encontrada.pre_ordem ?? '',
+      transportadora: encontrada.transportadora ?? ''
+    };
+
+  } catch (e) {
+    console.error('Erro ao buscar ordem e transportadora:', e);
+    return null;
+  }
+}
+
 async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
   try {
-    const response = await fetch('/api/pendencias');
+    const response = await fetch('http://192.168.53.193:5000/pendencias');
 
     if (!response.ok) {
       console.error('Erro ao buscar pendências');
@@ -249,7 +298,8 @@ updatePlaca(placaDoBanco: string) {
 }
 
 private placaInicializada = false;
-constructor(private router: Router) {
+constructor(
+  private router: Router) {
 
   effect(async () => {
   if (this.placaInicializada) return;
@@ -261,6 +311,19 @@ constructor(private router: Router) {
     ? placaRecebida.split('/')[1]
     : placaRecebida;
 
+const dados = await this.buscarOrdemETransportadoraPorPlaca(placaFormatada);
+
+  if (!dados) {
+    console.warn('⚠️ Ordem / transportadora não encontrada');
+    return;
+  }
+
+  this.form.get('dadosIniciais.numeroOrdem')
+    ?.setValue(dados.pre_ordem, { emitEvent: false });
+
+  this.form.get('dadosIniciais.transportadora')
+    ?.setValue(dados.transportadora, { emitEvent: false });
+    
   // mantém exatamente o que você já fazia
   this.form
     .get('fotosVistoria.placas.placa1')
@@ -363,7 +426,7 @@ toDatetimeLocalWithSeconds(date: Date): string {
  showSignatureFullscreen = signal(false);
  
 
-  activePad: 'cq' | 'motorista' | 'vistoriador' | null = null;
+  activePad:'motorista' | 'vistoriador' | null = null;
   activeCanvas: HTMLCanvasElement | null = null;
   signaturePreview: string | null = null;
 
@@ -374,10 +437,7 @@ toDatetimeLocalWithSeconds(date: Date): string {
     setTimeout(() => this.inicializarPadsPrincipais(), 150);
   }
 
-  getSavedSignature(which: 'cq' | 'motorista' | 'vistoriador') {
-  if (which === 'cq') {
-    return this.form.controls.finalizacao.controls.controleQualidadeAssinatura.value;
-  }
+  getSavedSignature(which: 'motorista' | 'vistoriador') {
   if (which === 'motorista') {
     return this.form.controls.finalizacao.controls.motoristaAssinatura.value;
   }
@@ -395,10 +455,6 @@ saveSignature() {
   if (!this.fullscreenPad || this.fullscreenPad.isEmpty()) return;
 
 const dataURL = this.fullscreenPad.toDataURL();
-
-  if (this.signatureFor === 'cq') {
-    this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
-  }
   if (this.signatureFor === 'motorista') {
     this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
   }
@@ -415,13 +471,6 @@ const dataURL = this.fullscreenPad.toDataURL();
 
   private inicializarPadsPrincipais(): void {
     try {
-      if (this.controleQualidadeCanvas?.nativeElement) {
-        this.padCQ = new SignaturePad(this.controleQualidadeCanvas.nativeElement, {
-          backgroundColor: 'white',
-          penColor: 'black'
-        });
-        this.padCQ.clear();
-      }
 
       if (this.motoristaCanvas?.nativeElement) {
         this.padMotorista = new SignaturePad(this.motoristaCanvas.nativeElement, {
@@ -444,7 +493,7 @@ const dataURL = this.fullscreenPad.toDataURL();
   }
 
   // Abre o canvas fullscreen para assinar
-openSignatureFullscreen(which: 'cq' | 'motorista' | 'vistoriador') {
+openSignatureFullscreen(which: 'motorista' | 'vistoriador') {
   this.signatureFor = which;
   this.activePad = which;
 
@@ -482,16 +531,7 @@ openSignatureFullscreen(which: 'cq' | 'motorista' | 'vistoriador') {
     this.signaturePreview = dataURL;
 
     try {
-      if (this.activePad === 'cq') {
-        // desenha no pad pequeno para visual imediato
-        if (this.padCQ && typeof this.padCQ.fromDataURL === 'function') {
-          this.padCQ.clear();
-          this.padCQ.fromDataURL(dataURL);
-        } else if (this.activeCanvas) {
-          this.drawImageOnCanvas(this.activeCanvas, dataURL);
-        }
-        this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
-      } else if (this.activePad === 'motorista') {
+      if (this.activePad === 'motorista') {
         if (this.padMotorista && typeof this.padMotorista.fromDataURL === 'function') {
           this.padMotorista.clear();
           this.padMotorista.fromDataURL(dataURL);
@@ -562,7 +602,7 @@ openSignatureFullscreen(which: 'cq' | 'motorista' | 'vistoriador') {
 
   // Fecha o fullscreen e garante que a assinatura foi salva no canvas pequeno
 // fechar fullscreen — aceita param opcional
-async closeSignatureFullscreen(pad?: 'cq' | 'motorista' | 'vistoriador') {
+async closeSignatureFullscreen(pad?: 'motorista' | 'vistoriador') {
   const container = document.getElementById('signatureFullscreen') as HTMLElement | null;
   // determina qual pad usar: argumento > estado interno
   const effectivePad = pad ?? this.activePad;
@@ -593,10 +633,6 @@ async closeSignatureFullscreen(pad?: 'cq' | 'motorista' | 'vistoriador') {
   let targetCanvas: HTMLCanvasElement | null = null;
 
   switch (effectivePad) {
-    case 'cq':
-      control = this.form.controls.finalizacao.controls.controleQualidadeAssinatura;
-      targetCanvas = this.controleQualidadeCanvas?.nativeElement ?? null;
-      break;
     case 'motorista':
       control = this.form.controls.finalizacao.controls.motoristaAssinatura;
       targetCanvas = this.motoristaCanvas?.nativeElement ?? null;
@@ -637,14 +673,11 @@ clearSignature() {
 }
 
   // Limpar assinatura — tanto do pad pequeno quanto do fullscreen (se presente)
-  limparAssinatura(which: 'cq' | 'motorista' | 'vistoriador') {
+  limparAssinatura(which: 'motorista' | 'vistoriador') {
     // limpa fullscreen também se estiver ativo
     try { this.fullscreenPad?.clear(); } catch (_) {}
 
-    if (which === 'cq') {
-      try { this.padCQ?.clear(); } catch (_) {}
-      this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue('');
-    } else if (which === 'motorista') {
+    if (which === 'motorista') {
       try { this.padMotorista?.clear(); } catch (_) {}
       this.form.controls.finalizacao.controls.motoristaAssinatura.setValue('');
     } else if (which === 'vistoriador') {
@@ -654,9 +687,8 @@ clearSignature() {
 
     this.signaturePreview = null;
   }
-private getTargetCanvas(which: 'cq' | 'motorista' | 'vistoriador'): HTMLCanvasElement | null {
+private getTargetCanvas(which: 'motorista' | 'vistoriador'): HTMLCanvasElement | null {
   switch (which) {
-    case 'cq': return this.controleQualidadeCanvas?.nativeElement ?? null;
     case 'motorista': return this.motoristaCanvas?.nativeElement ?? null;
     case 'vistoriador': return this.vistoriadorCanvas?.nativeElement ?? null;
   }
@@ -691,9 +723,7 @@ async saveAndCloseSignature() {
 
   // Salva no FormControl
   const dataURL = this.fullscreenPad.toDataURL();
-  if (this.signatureFor === 'cq') {
-    this.form.controls.finalizacao.controls.controleQualidadeAssinatura.setValue(dataURL);
-  } else if (this.signatureFor === 'motorista') {
+  if (this.signatureFor === 'motorista') {
     this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
   } else if (this.signatureFor === 'vistoriador') {
     this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
@@ -902,7 +932,7 @@ async onSubmit() {
   window.scrollTo(0, 0);
 
   // Envia os dados em background (fire-and-forget)
-  fetch('/api/vistoria', {
+  fetch( 'http://192.168.53.193:5000/vistoria', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),

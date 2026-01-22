@@ -76,7 +76,6 @@ context = {
     "container_peso": "",
     "observacoes": "Nenhuma observação adicional.",
     "assinaturas": {
-        "cq": {"nome": "Pedro CQ", "imagem": ""},
         "motorista": {"nome": "João Motorista", "imagem": ""},
         "vistoriador": {"nome": "Carlos Vistoriador", "imagem": ""}
     }
