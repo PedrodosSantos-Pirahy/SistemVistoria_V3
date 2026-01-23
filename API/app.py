@@ -1,3 +1,4 @@
+import shutil
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
@@ -6,7 +7,8 @@ import base64
 import re
 import io
 from datetime import datetime
-
+import tempfile
+from pathlib import Path
 #FILA + WORKER
 from queue import Queue
 from threading import Thread
@@ -113,6 +115,8 @@ sheets_service = build(
 
 
 
+BASE_TEMP = Path("/tmp/vistorias")
+
 # --------------------------------------------------------------------------
 # HELPERS
 # --------------------------------------------------------------------------
@@ -173,6 +177,35 @@ def detect_mime_and_data(dataurl: str):
         "image/webp": ".webp"
     }.get(mime, ".png")
     return mime, raw, ext
+
+def criar_pasta_temp_vistoria(id_vistoria: str) -> Path:
+    pasta = BASE_TEMP / f"vistoria_{id_vistoria}"
+
+    pasta.mkdir(parents=True, exist_ok=True)
+
+    log.warning("📁 Pasta da vistoria criada em: %s", pasta.resolve())
+    print("📁 Pasta da vistoria:", pasta.resolve())
+
+    return pasta
+def salvar_base64_em_arquivo(base64_data: str, destino: Path, nome: str):
+    if not base64_data:
+        return None
+
+    mime, raw, ext = detect_mime_and_data(base64_data)
+    if raw is None:
+        return None
+
+    arquivo = destino / f"{nome}{ext}"
+    with open(arquivo, "wb") as f:
+        f.write(raw)
+
+    log.info("Arquivo salvo localmente: %s", arquivo)
+    return arquivo
+def salvar_json_vistoria(payload: dict, pasta: Path):
+    arquivo = pasta / "respostas.json"
+    with open(arquivo, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    log.info("JSON da vistoria salvo em %s", arquivo)
 
 def upload_base64_to_drive(base64_data: str, filename_prefix: str):
     """
@@ -387,7 +420,7 @@ def get_agend_v2_columns(filter_date=None):
             CACHE_PENDENCIAS["expires"] = now + timedelta(minutes=5)
 
         return selected_data
-
+    
     except Exception as e:
         log.exception("Erro Sheets pendencias: %s", e)
         return None
@@ -607,6 +640,71 @@ def achar_ou_criar_linha_por_id(id_vistoria: str):
     return nova_linha
 
 def processar_vistoria(data: dict) -> dict:
+
+    id_vistoria = data.get("id_vistoria")
+
+    if not id_vistoria:
+        raise ValueError("id_vistoria é obrigatório")
+
+    pasta_temp = criar_pasta_temp_vistoria(id_vistoria)
+
+    salvar_json_vistoria(data, pasta_temp)
+
+    pasta_temp = criar_pasta_temp_vistoria(id_vistoria)
+    log.info("Pasta temporária da vistoria: %s", pasta_temp)
+    log.info("iniciando processo de salvamento de todas as assinaturas localmente")
+    salvar_json_vistoria(data, pasta_temp)
+
+        # FOTOS PLACA
+    placas = fv.get("placas", {})
+
+    salvar_base64_em_arquivo(
+        placas.get("fotoPlaca1"),
+        pasta_temp,
+        "placa_1"
+    )
+    salvar_base64_em_arquivo(
+        placas.get("fotoPlaca2"),
+        pasta_temp,
+        "placa_2"
+    )
+    salvar_base64_em_arquivo(
+        placas.get("fotoPlaca3"),
+        pasta_temp,
+        "placa_3"
+    )
+
+    # INTERIOR
+    interior = fv.get("interiorCarroceria", {})
+    salvar_base64_em_arquivo(
+        interior.get("fotoInterior1"),
+        pasta_temp,
+        "interior_1"
+    )
+    salvar_base64_em_arquivo(
+        interior.get("fotoInterior2"),
+        pasta_temp,
+        "interior_2"
+    )
+
+    # ASSINATURAS
+    salvar_base64_em_arquivo(
+        fin.get("motoristaAssinatura"),
+        pasta_temp,
+        "assinatura_motorista"
+    )
+    salvar_base64_em_arquivo(
+        fin.get("vistoriadorAssinatura"),
+        pasta_temp,
+        "assinatura_vistoriador"
+    )
+
+    pdf_path = gerar_pdf_vistoria(context)
+    pdf_destino = pasta_temp / "vistoria.pdf"
+    shutil.copy(pdf_path, pdf_destino)
+
+    log.info("PDF salvo localmente: %s", pdf_destino)
+
 
     log.info("PROCESSAR_VISTORIA | Início do processamento")
     log.debug("PROCESSAR_VISTORIA | Payload completo: %s", json.dumps(data, indent=2))

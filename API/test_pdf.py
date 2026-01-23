@@ -11,8 +11,9 @@ from googleapiclient.http import MediaFileUpload
 # ---------------------------
 # CONFIG GOOGLE
 # ---------------------------
-SERVICE_ACCOUNT_FILE = r"C:\Users\pedrosantos\OneDrive - PIRAHY\DEV\Sistema Vistorias - Pirahy\SistemVistoria\API\service-account.json"
+SERVICE_ACCOUNT_FILE = r"\API\service-account.json"
 DRIVE_FOLDER_ID = "0AKLd3H4beidVUk9PVA"
+
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
