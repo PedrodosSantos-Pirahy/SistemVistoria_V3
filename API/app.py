@@ -1,3 +1,18 @@
+from googleapiclient.errors import HttpError
+from google_auth_httplib2 import AuthorizedHttp
+import httplib2
+from datetime import timedelta
+from dotenv import load_dotenv
+from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaFileUpload
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+import uuid
+import os
+from weasyprint import HTML
+from flask import render_template
+import traceback
+import json
 import shutil
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -9,53 +24,43 @@ import io
 from datetime import datetime
 import tempfile
 from pathlib import Path
-#FILA + WORKER
+# FILA + WORKER
 from queue import Queue
 from threading import Thread
 import time
 
 vistoria_queue = Queue(maxsize=100)  # evita overload
 
-#Helpers
-import json
-from pathlib import Path
-import traceback
+# Helpers
 
 BACKUP_DIR = Path("backups_vistorias")
 BACKUP_DIR.mkdir(exist_ok=True)
 
 
-#PDF
-from flask import render_template
-from weasyprint import HTML
-import os
-import uuid
+# PDF
 
-from googleapiclient.discovery import build
-from google.oauth2.service_account import Credentials
-from googleapiclient.http import MediaFileUpload
-from googleapiclient.http import MediaIoBaseDownload
-
-from dotenv import load_dotenv
 
 print("=== DEBUG INICIAL ===")
 print("Arquivo atual:", __file__)
 print("Diretório atual (cwd):", os.getcwd())
 print("Existe .env aqui?:", Path(".env").exists())
-print("Existe service_account.json aqui?:", Path("service_account.json").exists())
+print("Existe service_account.json aqui?:",
+      Path("service_account.json").exists())
 print("=====================")
 ##
 
 # --------------------------------------------------------------------------
 # LOG
 # --------------------------------------------------------------------------
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("vistoria-api")
 
 # --------------------------------------------------------------------------
 # FLASK
 # --------------------------------------------------------------------------
-app = Flask(__name__, template_folder=os.path.dirname(os.path.abspath(__file__)))
+app = Flask(__name__, template_folder=os.path.dirname(
+    os.path.abspath(__file__)))
 CORS(app)
 
 # --------------------------------------------------------------------------
@@ -67,7 +72,8 @@ SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
 print("SERVICE ACCOUNT PATH:", SERVICE_ACCOUNT_PATH)
 
 if not SERVICE_ACCOUNT_PATH.exists():
-    raise RuntimeError(f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
+    raise RuntimeError(
+        f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -75,24 +81,22 @@ SCOPES = [
 ]
 creds = Credentials.from_service_account_file(
     SERVICE_ACCOUNT_PATH,
-     scopes=SCOPES
+    scopes=SCOPES
 )
 
 SHEET_ID = "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw"
 SHEET_TAB = "Respostas_V2"
 AUDITORIA_TAB = "Auditoria"
 
-#Comparar
-#1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw
-#1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw
-SPREADSHEET_ID = os.getenv("SPREADSHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
+# Comparar
+# 1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw
+# 1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw
+SPREADSHEET_ID = os.getenv(
+    "SPREADSHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
 
 # Pasta/Unidade destino no Drive (pode ser Shared Drive). A service account deve ter acesso.
 DRIVE_FOLDER_ID = "0AKLd3H4beidVUk9PVA"
 
-
-
-from datetime import timedelta
 
 CACHE_PENDENCIAS = {
     "data": None,
@@ -100,8 +104,6 @@ CACHE_PENDENCIAS = {
 }
 
 drive_service = build("drive", "v3", credentials=creds)
-import httplib2
-from google_auth_httplib2 import AuthorizedHttp
 
 http = httplib2.Http(timeout=60)
 authed_http = AuthorizedHttp(creds, http=http)
@@ -114,7 +116,6 @@ sheets_service = build(
 ).spreadsheets()
 
 
-
 BASE_TEMP = Path("/tmp/vistorias")
 
 # --------------------------------------------------------------------------
@@ -122,7 +123,7 @@ BASE_TEMP = Path("/tmp/vistorias")
 # --------------------------------------------------------------------------
 DATAURL_RE = re.compile(r"^data:(?P<mime>[^;]+);base64,(?P<data>.+)$")
 
-#STATUS OFICIAIS DA AUDITORIA
+# STATUS OFICIAIS DA AUDITORIA
 STATUS_VALIDOS = {
     "PENDENTE",
     "EM_ANDAMENTO",
@@ -139,7 +140,7 @@ TRANSICOES_VALIDAS = {
     "EXPIRADA": {"REALIZADA_COM_ATRASO"},
 }
 
-#MiniDash da API
+# MiniDash da API
 STATUS = {
     "started_at": datetime.utcnow(),
     "processing": False,
@@ -148,6 +149,7 @@ STATUS = {
     "last_error": None,
     "last_success": None
 }
+
 
 def detect_mime_and_data(dataurl: str):
     """
@@ -178,6 +180,7 @@ def detect_mime_and_data(dataurl: str):
     }.get(mime, ".png")
     return mime, raw, ext
 
+
 def criar_pasta_temp_vistoria(id_vistoria: str) -> Path:
     pasta = BASE_TEMP / f"vistoria_{id_vistoria}"
 
@@ -187,6 +190,8 @@ def criar_pasta_temp_vistoria(id_vistoria: str) -> Path:
     print("📁 Pasta da vistoria:", pasta.resolve())
 
     return pasta
+
+
 def salvar_base64_em_arquivo(base64_data: str, destino: Path, nome: str):
     if not base64_data:
         return None
@@ -201,11 +206,14 @@ def salvar_base64_em_arquivo(base64_data: str, destino: Path, nome: str):
 
     log.info("Arquivo salvo localmente: %s", arquivo)
     return arquivo
+
+
 def salvar_json_vistoria(payload: dict, pasta: Path):
     arquivo = pasta / "respostas.json"
     with open(arquivo, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
     log.info("JSON da vistoria salvo em %s", arquivo)
+
 
 def upload_base64_to_drive(base64_data: str, filename_prefix: str):
     """
@@ -226,7 +234,8 @@ def upload_base64_to_drive(base64_data: str, filename_prefix: str):
     try:
         with open(temp_path, "wb") as f:
             f.write(raw)
-        log.info("Arquivo temporário criado: %s (bytes=%d, mime=%s)", temp_path, len(raw), mime)
+        log.info("Arquivo temporário criado: %s (bytes=%d, mime=%s)",
+                 temp_path, len(raw), mime)
 
         media = MediaFileUpload(temp_path, mimetype=mime, resumable=True)
         metadata = {"name": temp_name}
@@ -259,16 +268,19 @@ def upload_base64_to_drive(base64_data: str, filename_prefix: str):
             ).execute()
             log.info("Permissão 'anyone' criada para file_id=%s", file_id)
         except Exception as pe:
-            log.warning("Não foi possível setar permissão 'anyone' para %s: %s", file_id, pe)
+            log.warning(
+                "Não foi possível setar permissão 'anyone' para %s: %s", file_id, pe)
 
         # preferir webContentLink/WebViewLink se disponível
-        link = created.get("webContentLink") or created.get("webViewLink") or f"https://drive.google.com/file/d/{file_id}/view"
+        link = created.get("webContentLink") or created.get(
+            "webViewLink") or f"https://drive.google.com/file/d/{file_id}/view"
         log.info("Upload OK: id=%s link=%s", file_id, link)
 
         return link
 
     except Exception as e:
-        log.exception("Erro no upload_base64_to_drive (%s): %s", filename_prefix, e)
+        log.exception("Erro no upload_base64_to_drive (%s): %s",
+                      filename_prefix, e)
         return ""
     finally:
         try:
@@ -277,6 +289,7 @@ def upload_base64_to_drive(base64_data: str, filename_prefix: str):
                 log.debug("Temp file removido: %s", temp_path)
         except Exception:
             pass
+
 
 def upload_file_to_drive(file_path: str, filename: str, mime: str):
     """
@@ -330,8 +343,6 @@ def upload_file_to_drive(file_path: str, filename: str, mime: str):
         log.exception("Erro upload_file_to_drive: %s", e)
         return ""
 
-import time
-from googleapiclient.errors import HttpError
 
 def sheets_get_with_retry(service, spreadsheet_id, range_name, retries=3):
     for attempt in range(retries):
@@ -376,28 +387,28 @@ def get_agend_v2_columns(filter_date=None):
         if not values:
             return []
 
-        
         selected_data = []
 
         for row in values[1:]:  # pula cabeçalho
-            date_value = row[1] if len(row) > 1 and isinstance(row[1], str) else ""     #B
-            hora = row[2] if len(row) > 2 else ""           #C
-            pre_ordem = row[4] if len(row) > 4 else ""      #E
-            transportadora = row[5] if len(row) > 5 else "" #F
-            status = row[10] if len(row) > 10 else ""       #K
-            id_vistoria = row[24] if len(row) > 24 else ""  #Y
-            placa = row[25] if len(row) > 25 else ""        #Z
+            date_value = row[1] if len(row) > 1 and isinstance(
+                row[1], str) else ""  # B
+            hora = row[2] if len(row) > 2 else ""  # C
+            pre_ordem = row[4] if len(row) > 4 else ""  # E
+            transportadora = row[5] if len(row) > 5 else ""  # F
+            status = row[10] if len(row) > 10 else ""  # K
+            id_vistoria = row[24] if len(row) > 24 else ""  # Y
+            placa = row[25] if len(row) > 25 else ""  # Z
 
             status_normalizado = status.strip().lower()
             if not date_value:
-                continue 
+                continue
 
             categoria_data = classificar_data(date_value)
 
             if (
                 status_normalizado not in ("concluida", "cancelada")
                 and categoria_data != "indefinida"
-                
+
             ):
                 selected_data.append({
                     "data": date_value,
@@ -410,8 +421,6 @@ def get_agend_v2_columns(filter_date=None):
                     "transportadora": transportadora
                 })
 
-
-
         selected_data.sort(key=lambda x: x.get("hora", ""))
 
         # ---------- SALVA CACHE ----------
@@ -420,10 +429,11 @@ def get_agend_v2_columns(filter_date=None):
             CACHE_PENDENCIAS["expires"] = now + timedelta(minutes=5)
 
         return selected_data
-    
+
     except Exception as e:
         log.exception("Erro Sheets pendencias: %s", e)
         return None
+
 
 def classificar_data(data_str: str) -> str:
     if not data_str or not isinstance(data_str, str):
@@ -452,6 +462,7 @@ def classificar_data(data_str: str) -> str:
             continue
 
     return "indefinida"
+
 
 def extract_status(obj):
     return obj.get("status", "") if obj else ""
@@ -506,6 +517,7 @@ def montar_ocorrencias(ii, pc, dv):
 
     return ocorrencias
 
+
 def gerar_pdf_vistoria(context):
     html = render_template("vistoria_pdf.html", **context)
 
@@ -523,7 +535,7 @@ def gerar_pdf_vistoria(context):
 
     return pdf_path
 
-    
+
 # --- FUNÇÃO DE VALIDAÇÃO (fora de qualquer @app.post) ---
 def validar_assinaturas(context):
     obrigatorias = ["motorista", "vistoriador"]
@@ -536,11 +548,8 @@ def validar_assinaturas(context):
         if not assinaturas[papel].get("imagem") or not assinaturas[papel].get("nome"):
             raise ValueError(f"Assinatura obrigatória incompleta: {papel}")
 
-import io
-import base64
-from googleapiclient.http import MediaIoBaseDownload
 
-def baixar_imagem_drive_base64(DRIVE_FOLDER_ID : str) -> str:
+def baixar_imagem_drive_base64(DRIVE_FOLDER_ID: str) -> str:
     if not DRIVE_FOLDER_ID:
         return ""
 
@@ -555,6 +564,7 @@ def baixar_imagem_drive_base64(DRIVE_FOLDER_ID : str) -> str:
     fh.seek(0)
     encoded = base64.b64encode(fh.read()).decode("utf-8")
     return f"data:image/png;base64,{encoded}"
+
 
 def buscar_vistoria_por_placa(placa: str):
     result = sheets_service.values().get(
@@ -571,9 +581,11 @@ def buscar_vistoria_por_placa(placa: str):
 
     return None, None
 
+
 def data_eh_hoje(data_str: str) -> bool:
     hoje = datetime.now().strftime("%d/%m/%Y")
     return data_str == hoje
+
 
 def registrar_auditoria(
     placa,
@@ -603,6 +615,7 @@ def registrar_auditoria(
         valueInputOption="RAW",
         body={"values": [linha]}
     ).execute()
+
 
 def achar_ou_criar_linha_por_id(id_vistoria: str):
     """
@@ -639,6 +652,7 @@ def achar_ou_criar_linha_por_id(id_vistoria: str):
 
     return nova_linha
 
+
 def processar_vistoria(data: dict) -> dict:
 
     id_vistoria = data.get("id_vistoria")
@@ -655,7 +669,7 @@ def processar_vistoria(data: dict) -> dict:
     log.info("iniciando processo de salvamento de todas as assinaturas localmente")
     salvar_json_vistoria(data, pasta_temp)
 
-        # FOTOS PLACA
+    # FOTOS PLACA
     placas = fv.get("placas", {})
 
     salvar_base64_em_arquivo(
@@ -705,9 +719,9 @@ def processar_vistoria(data: dict) -> dict:
 
     log.info("PDF salvo localmente: %s", pdf_destino)
 
-
     log.info("PROCESSAR_VISTORIA | Início do processamento")
-    log.debug("PROCESSAR_VISTORIA | Payload completo: %s", json.dumps(data, indent=2))
+    log.debug("PROCESSAR_VISTORIA | Payload completo: %s",
+              json.dumps(data, indent=2))
 
     # --------------------
     # DADOS INICIAIS
@@ -735,18 +749,25 @@ def processar_vistoria(data: dict) -> dict:
     try:
         placas = fv.get("placas", {})
         log.info("UPLOAD | Placas: %s", placas)
-        uploaded["fotoPlaca1"] = upload_base64_to_drive(placas.get("fotoPlaca1"), "placa1")
-        uploaded["fotoPlaca2"] = upload_base64_to_drive(placas.get("fotoPlaca2"), "placa2")
-        uploaded["fotoPlaca3"] = upload_base64_to_drive(placas.get("fotoPlaca3"), "placa3")
+        uploaded["fotoPlaca1"] = upload_base64_to_drive(
+            placas.get("fotoPlaca1"), "placa1")
+        uploaded["fotoPlaca2"] = upload_base64_to_drive(
+            placas.get("fotoPlaca2"), "placa2")
+        uploaded["fotoPlaca3"] = upload_base64_to_drive(
+            placas.get("fotoPlaca3"), "placa3")
 
         interior = fv.get("interiorCarroceria", {})
         log.info("UPLOAD | Interior Carroceria: %s", interior)
-        uploaded["fotoInterior1"] = upload_base64_to_drive(interior.get("fotoInterior1"), "interior1")
-        uploaded["fotoInterior2"] = upload_base64_to_drive(interior.get("fotoInterior2"), "interior2")
+        uploaded["fotoInterior1"] = upload_base64_to_drive(
+            interior.get("fotoInterior1"), "interior1")
+        uploaded["fotoInterior2"] = upload_base64_to_drive(
+            interior.get("fotoInterior2"), "interior2")
 
         log.info("UPLOAD | Assinaturas")
-        uploaded["assinaturaMotorista"] = upload_base64_to_drive(fin.get("motoristaAssinatura"), "assinatura_motorista")
-        uploaded["assinaturaVistoriador"] = upload_base64_to_drive(fin.get("vistoriadorAssinatura"), "assinatura_vistoriador")
+        uploaded["assinaturaMotorista"] = upload_base64_to_drive(
+            fin.get("motoristaAssinatura"), "assinatura_motorista")
+        uploaded["assinaturaVistoriador"] = upload_base64_to_drive(
+            fin.get("vistoriadorAssinatura"), "assinatura_vistoriador")
         log.info("UPLOAD | Upload concluído: %s", uploaded.keys())
     except Exception as e:
         log.exception("UPLOAD | Erro no upload de fotos/assinaturas: %s", e)
@@ -795,7 +816,8 @@ def processar_vistoria(data: dict) -> dict:
             }
         }
         log.info("PDF | Contexto criado")
-        log.debug("PDF | Contexto detalhado: %s", json.dumps(context, indent=2))
+        log.debug("PDF | Contexto detalhado: %s",
+                  json.dumps(context, indent=2))
     except Exception as e:
         log.exception("PDF | Erro ao criar contexto do PDF: %s", e)
         raise
@@ -817,7 +839,8 @@ def processar_vistoria(data: dict) -> dict:
     try:
         pdf_path = gerar_pdf_vistoria(context)
         log.info("PDF | PDF gerado em %s", pdf_path)
-        pdf_link = upload_file_to_drive(pdf_path, f"vistoria_{di.get('numeroOrdem','')}.pdf", "application/pdf")
+        pdf_link = upload_file_to_drive(
+            pdf_path, f"vistoria_{di.get('numeroOrdem','')}.pdf", "application/pdf")
         log.info("PDF | Upload do PDF concluído: %s", pdf_link)
     except Exception as e:
         log.exception("PDF | Erro na geração ou upload do PDF: %s", e)
@@ -875,7 +898,7 @@ def processar_vistoria(data: dict) -> dict:
         ]
         response = sheets_service.values().append(
             spreadsheetId=SHEET_ID,
-            range=f"{SHEET_TAB}!A2:A5000",            
+            range=f"{SHEET_TAB}!A2:A5000",
             valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={"values": [linha]}
@@ -888,9 +911,11 @@ def processar_vistoria(data: dict) -> dict:
         log.exception("SHEETS | Erro ao enviar para Google Sheets: %s", e)
         raise
 
-    log.info("PROCESSAR_VISTORIA | Vistoria concluída com sucesso | ID=%s", id_vistoria)
+    log.info(
+        "PROCESSAR_VISTORIA | Vistoria concluída com sucesso | ID=%s", id_vistoria)
 
     return {"status": "ok", "id": id_vistoria, "pdf": pdf_link}
+
 
 def salvar_backup_vistoria(payload: dict):
     try:
@@ -906,14 +931,14 @@ def salvar_backup_vistoria(payload: dict):
 
         placa = placa.replace(" ", "").upper()
 
-        data_agendada = di.get("vistoria") or di.get("chegada") or datetime.now().strftime("%d/%m/%Y")
+        data_agendada = di.get("vistoria") or di.get(
+            "chegada") or datetime.now().strftime("%d/%m/%Y")
         try:
             data_fmt = datetime.strptime(data_agendada, "%d/%m/%Y")
         except ValueError:
             data_fmt = datetime.strptime(data_agendada, "%d/%m/%Y %H:%M")
 
         data_fmt = data_fmt.strftime("%Y-%m-%d")
-
 
         filename = f"{placa}_{data_fmt}.json"
         path = BACKUP_DIR / filename
@@ -925,6 +950,7 @@ def salvar_backup_vistoria(payload: dict):
 
     except Exception as e:
         log.exception("Falha ao salvar backup da vistoria: %s", e)
+
 
 def worker():
     while True:
@@ -978,9 +1004,11 @@ def home():
     return jsonify({"status": "API online"})
 
 # ---- endpoint API JSON ----
+
+
 @app.get("/pendencias")
 def pendencias():
-    
+
     date_filter = request.args.get("data")  # opcional: dd/mm/yyyy
     data = get_agend_v2_columns(date_filter)
 
@@ -996,6 +1024,8 @@ def pendencias():
 # -------------------
 # NÃO MEXER
 # -------------------
+
+
 @app.post("/vistoria")
 def receive_vistoria():
     if not request.json:
@@ -1016,6 +1046,7 @@ def receive_vistoria():
         return jsonify({"error": result_holder["error"]}), 500
 
     return jsonify(result_holder["response"]), 200
+
 
 @app.post("/cancelar")
 def cancelar_vistoria():
@@ -1067,6 +1098,7 @@ def cancelar_vistoria():
         log.exception("Erro ao cancelar vistoria")
         return jsonify({"error": str(e)}), 500
 
+
 @app.before_request
 def log_request():
     print(">>>", request.method, request.path)
@@ -1076,17 +1108,16 @@ def log_request():
 # RUN
 # --------------------------------------------------------------------------
 # Gunicorn é o responsável por iniciar a aplicação
-#if __name__ == "__main__":
+# if __name__ == "__main__":
 #   log.info("SUBINDO API FLASK (DEV)")
 #   HOST = os.getenv("API_HOST", "127.0.0.1")
 #   PORT = int(os.getenv("API_PORT", 5000))
-#   
+#
 #   app.run(host=HOST, port=PORT)
 
 if __name__ == "__main__":
-   log.info("SUBINDO API FLASK (DEV)")
-   HOST = os.getenv("API_HOST", "192.168.53.193")
-   PORT = int(os.getenv("API_PORT", 5000))
-   
-   app.run(host=HOST, port=PORT)
+    log.info("SUBINDO API FLASK (DEV)")
+    HOST = os.getenv("API_HOST", "192.168.2.100")
+    PORT = int(os.getenv("API_PORT", 5000))
 
+    app.run(host=HOST, port=PORT)

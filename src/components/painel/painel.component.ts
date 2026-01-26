@@ -13,6 +13,7 @@ interface Inspection {
   status: string;
   id: string;
   categoria_data: string;
+  data?: string;
 }
 
 
@@ -29,7 +30,7 @@ interface Inspection {
 export class PainelComponent implements OnInit {
 
 
- // @Input() onSelect!: (placa: string) => void;
+  // @Input() onSelect!: (placa: string) => void;
   /**
    * Lista de vistorias pendentes exibidas no painel
    * Utiliza signal para melhor performance com OnPush
@@ -69,22 +70,22 @@ export class PainelComponent implements OnInit {
   selectedInspection = signal<Inspection | null>(null);
 
   private irHistorico = signal(false);
-  constructor(private router: Router) {}
+  constructor(private router: Router) { }
 
   ngOnInit(): void {
-  this.fetchInspections();
-
-  // 🔁 força atualização a cada 10 segundos
-  this.pollingInterval = window.setInterval(() => {
     this.fetchInspections();
-  }, 10000); // 10s (pode baixar pra 5s)
-}
+
+    // 🔁 força atualização a cada 10 segundos
+    this.pollingInterval = window.setInterval(() => {
+      this.fetchInspections();
+    }, 10000); // 10s (pode baixar pra 5s)
+  }
 
   ngOnDestroy(): void {
-  if (this.pollingInterval) {
-    clearInterval(this.pollingInterval);
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+    }
   }
-}
 
 
   /**
@@ -92,17 +93,17 @@ export class PainelComponent implements OnInit {
    * 🔥 AGORA TAMBÉM TRAZ O STATUS
    */
 
- 
+
 
   async fetchInspections(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
-     /* Metodo de produção
-      const response = await fetch("/api/pendencias", {
-      */ 
-      const response = await fetch("http://192.168.53.193:5000/pendencias", {
+      /* Metodo de produção
+       const response = await fetch("/api/pendencias", {
+       */
+      const response = await fetch("http://192.168.2.100:5000/pendencias", {
         method: 'GET'
       });
 
@@ -128,23 +129,25 @@ export class PainelComponent implements OnInit {
        * mantendo placa + status
        */
       const parsedInspections: Inspection[] = pendentes
-      
-  .map((item: any) => {
-    if (!item?.placa || !item?.status || !item?.id) {
-      console.warn('Item inválido ignorado:', item);
-      return null;
-    }
 
-    return {
-      placa: item.placa,
-      status: item.status,
-      id: item.id,
-      pre_ordem: item.pre_ordem,
-      transportadora: item.transportadora,
-      categoria_data: item.categoria_data?.trim()
-    };
-  })
-  .filter((item): item is Inspection => item !== null);
+        .map((item: any) => {
+          if (!item?.placa || !item?.status || !item?.id) {
+            console.warn('Item inválido ignorado:', item);
+            return null;
+          }
+
+          return {
+            placa: item.placa,
+            status: item.status,
+            id: item.id,
+            data: item.data,
+            pre_ordem: item.pre_ordem,
+            transportadora: item.transportadora,
+            categoria_data: item.categoria_data?.trim()
+          };
+        })
+        .filter(item => item !== null) as Inspection[];
+
 
 
       // Atualiza o estado do painel
@@ -166,57 +169,57 @@ export class PainelComponent implements OnInit {
   }
 
   reloadPage() {
-  window.location.reload();
-}
-
-tipoFiltro = signal<
-  'Data Atual' | 'Datas Anteriores' | 'Datas Futuras' | 'Todas as Datas' >('Data Atual');
-
-
-get vistoriasFiltradas(): Inspection[] {
-  const lista = this.inspections();
-  const filtro = this.tipoFiltro();
-
-  if (filtro === 'Todas as Datas') {
-    return lista;
+    window.location.reload();
   }
 
-  return lista.filter(v => v.categoria_data === filtro);
-}
+  tipoFiltro = signal<
+    'Data Atual' | 'Datas Anteriores' | 'Datas Futuras' | 'Todas as Datas'>('Data Atual');
 
 
+  get vistoriasFiltradas(): Inspection[] {
+    const lista = this.inspections();
+    const filtro = this.tipoFiltro();
 
-tituloFiltro = computed(() => {
-  switch (this.tipoFiltro()) {
-    case 'Data Atual': return 'Hoje';
-    case 'Datas Anteriores': return 'Datas Anteriores';
-    case 'Datas Futuras': return 'Datas Futuras';
-    default: return '';
+    if (filtro === 'Todas as Datas') {
+      return lista;
+    }
+
+    return lista.filter(v => v.categoria_data === filtro);
   }
-});
 
 
 
-private pollingInterval!: number;
+  tituloFiltro = computed(() => {
+    switch (this.tipoFiltro()) {
+      case 'Data Atual': return 'Hoje';
+      case 'Datas Anteriores': return 'Datas Anteriores';
+      case 'Datas Futuras': return 'Datas Futuras';
+      default: return '';
+    }
+  });
 
 
-selectInspection(inspection: Inspection) {
-  if (this.showDecisionModal()) return;
 
-  console.log('PAINEL EMITINDO:', inspection);
-  this.inspectionSelected.emit(inspection);
-}
-irParaHistorico() {
-  this.verTodas.emit();
-}
+  private pollingInterval!: number;
 
-abrirCancelamento(event: Event, inspection: Inspection) {
-  event.preventDefault();
-  event.stopImmediatePropagation(); // 🔑 ESSENCIAL
 
-  this.selectedInspection.set(inspection);
-  this.showDecisionModal.set(true);
-}
+  selectInspection(inspection: Inspection) {
+    if (this.showDecisionModal()) return;
+
+    console.log('PAINEL EMITINDO:', inspection);
+    this.inspectionSelected.emit(inspection);
+  }
+  irParaHistorico() {
+    this.verTodas.emit();
+  }
+
+  abrirCancelamento(event: Event, inspection: Inspection) {
+    event.preventDefault();
+    event.stopImmediatePropagation(); // 🔑 ESSENCIAL
+
+    this.selectedInspection.set(inspection);
+    this.showDecisionModal.set(true);
+  }
 
 
 
@@ -229,38 +232,38 @@ abrirCancelamento(event: Event, inspection: Inspection) {
   }
 
   async confirmarCancelamento() {
-  const inspection = this.selectedInspection();
+    const inspection = this.selectedInspection();
 
-  if (!inspection || !inspection.id) {
-    alert('ID da vistoria não encontrado'); 
-    return;
-  }
+    if (!inspection || !inspection.id) {
+      alert('ID da vistoria não encontrado');
+      return;
+    }
 
-  const payload = {
-    id: inspection.id, // 🔑 VEM DO JSON DE PENDENCIAS
-    nome: this.nomeCancelamento,
-    motivo: this.motivo
+    const payload = {
+      id: inspection.id, // 🔑 VEM DO JSON DE PENDENCIAS
+      nome: this.nomeCancelamento,
+      motivo: this.motivo
+    };
+
+    console.log('ENVIANDO CANCELAMENTO:', payload);
+
+    const response = await fetch('http://192.168.2.100:5000/cancelar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      alert(result.error || 'Erro ao cancelar');
+      return;
+    }
+
+
+    this.fecharModal();
+
+
+
   };
-
-  console.log('ENVIANDO CANCELAMENTO:', payload);
-
-  const response = await fetch('http://192.168.53.193:5000/cancelar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  const result = await response.json();
-
-  if (!response.ok) {
-    alert(result.error || 'Erro ao cancelar');
-  return;
-}
-
-
-  this.fecharModal();
-
-  
- 
-};
 }

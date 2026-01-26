@@ -18,7 +18,8 @@ import httplib2
 app = Flask(__name__)
 CORS(app)
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("historico-api")
 
 # --------------------------------------------------------------------------
@@ -28,7 +29,8 @@ BASE_DIR = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
 
 if not SERVICE_ACCOUNT_PATH.exists():
-    raise RuntimeError(f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
+    raise RuntimeError(
+        f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -53,15 +55,19 @@ sheets_service = build(
 # --------------------------------------------------------------------------
 # Configurações do Sheet
 # --------------------------------------------------------------------------
-SHEET_ID = os.getenv("SHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
+SHEET_ID = os.getenv(
+    "SHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
 HISTORICO_TAB = "Agend_V2"
 
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
+
+
 def validar_payload(payload: dict) -> bool:
     obrigatorios = ["ID", "Pré-Ordem", "Vistoriador", "Placa"]
     return all(k in payload for k in obrigatorios)
+
 
 def sheets_append_row(values: list):
     """Insere uma linha no Google Sheets"""
@@ -77,6 +83,7 @@ def sheets_append_row(values: list):
     log.info("Linha inserida no Sheets: %s", updated_range)
     return updated_range
 
+
 def sheets_read_rows():
     """Lê todas as linhas do histórico do Sheets"""
     result = sheets_service.values().get(
@@ -84,6 +91,8 @@ def sheets_read_rows():
         range=f"{HISTORICO_TAB}!A2:Z5000"
     ).execute()
     return result.get("values", [])
+
+
 def safe_get(r, idx):
 
     return r[idx] if len(r) > idx else ""
@@ -96,6 +105,7 @@ def safe_get(r, idx):
 def home():
     return jsonify({"status": "API de Histórico online"})
 
+
 @app.post("/historico")
 def criar_historico():
     payload = request.json
@@ -105,7 +115,8 @@ def criar_historico():
     if not validar_payload(payload):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
 
-    payload["data"] = payload.get("data") or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    payload["data"] = payload.get(
+        "data") or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     row = [
         payload["ID"],
@@ -127,6 +138,7 @@ def criar_historico():
         return jsonify({"error": str(e)}), 500
 
     return jsonify({"status": "ok", "historico": payload}), 201
+
 
 @app.get("/historico")
 def listar_historico():
@@ -164,6 +176,7 @@ def listar_historico():
         historico.append(item)
 
     return jsonify({"status": "ok", "total": len(historico), "historico": historico})
+
 
 # --------------------------------------------------------------------------
 # Run

@@ -67,7 +67,7 @@ export class HistoricoComponent implements OnInit {
     this.carregando.set(true);
     this.erro.set(null);
 
-    this.http.get<any>('http://localhost:5002/historico')
+    this.http.get<any>('http://192.168.2.100:5002/historico')
       .subscribe({
         next: res => {
           const dados: Historico[] = (res?.historico ?? [])
@@ -119,13 +119,17 @@ export class HistoricoComponent implements OnInit {
      Computed: filtro + ordenação
   ======================= */
   historicoFiltrado = computed(() => {
-    const placaFiltro = this.buscaPlaca().toUpperCase();
-    const transpFiltro = this.buscaTransp().toUpperCase();
+    const placaFiltro = this.normalizarPlaca(this.buscaPlaca());
+    const transpFiltro = this.buscaTransp().trim().toUpperCase();
 
-    const filtrado = this.historico().filter(h =>
-      h.placa.includes(placaFiltro) &&
-      h.transportadora.toUpperCase().includes(transpFiltro)
-    );
+    const filtrado = this.historico().filter(h => {
+      const placaHistorico = this.normalizarPlaca(h.placa);
+
+      return (
+        placaHistorico.includes(placaFiltro) &&
+        h.transportadora.toUpperCase().includes(transpFiltro)
+      );
+    });
 
     return [...filtrado].sort((a, b) => {
       const dataA = this.parseDataHora(a.data, a.hora);
@@ -159,49 +163,49 @@ export class HistoricoComponent implements OnInit {
 
     return new Date(ano, mes - 1, dia, hh, mm).getTime();
   }
-/* =======================
-   Placa helpers (formatação)
-======================= */
-private normalizarPlaca(valor: string): string {
-  return valor
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '');
-}
-/* =======================
-   Modal PDF
-======================= */
-modalAberto = signal(false);
-pdfSelecionado = signal<string | null>(null);
+  /* =======================
+     Placa helpers (formatação)
+  ======================= */
+  private normalizarPlaca(valor: string): string {
+    return valor
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+  /* =======================
+     Modal PDF
+  ======================= */
+  modalAberto = signal(false);
+  pdfSelecionado = signal<string | null>(null);
 
-abrirPdf(pdfUrl: string): void {
-  if (!pdfUrl) return;
+  abrirPdf(pdfUrl: string): void {
+    if (!pdfUrl) return;
 
-  // força visualização no Drive
-  const url = pdfUrl.includes('preview')
-    ? pdfUrl
-    : pdfUrl.replace('/view', '/preview');
+    // força visualização no Drive
+    const url = pdfUrl.includes('preview')
+      ? pdfUrl
+      : pdfUrl.replace('/view', '/preview');
 
-  this.pdfSelecionado.set(url);
-  this.modalAberto.set(true);
-}
-
-fecharModal(): void {
-  this.modalAberto.set(false);
-  this.pdfSelecionado.set(null);
-}
-
-
-formatarPlacaInput(valor: string): void {
-  const limpa = this.normalizarPlaca(valor);
-
-  if (limpa.length <= 3) {
-    this.buscaPlaca.set(limpa);
-    return;
+    this.pdfSelecionado.set(url);
+    this.modalAberto.set(true);
   }
 
-  const formatada = `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}`;
-  this.buscaPlaca.set(formatada);
-}
+  fecharModal(): void {
+    this.modalAberto.set(false);
+    this.pdfSelecionado.set(null);
+  }
+
+
+  formatarPlacaInput(valor: string): void {
+    const limpa = this.normalizarPlaca(valor);
+
+    if (limpa.length <= 3) {
+      this.buscaPlaca.set(limpa);
+      return;
+    }
+
+    const formatada = `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}`;
+    this.buscaPlaca.set(formatada);
+  }
 
   /* =======================
      Navigation
