@@ -95,16 +95,27 @@ export class PainelComponent implements OnInit {
 
 
 
-  async fetchInspections(): Promise<void> {
+  async fetchInspections(force = false): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
+      const timestamp = new Date().getTime();
+      if (force) console.log('🔄 Forçando atualização manual...');
+      // 2. Adicione &force=true se o parâmetro force for verdadeiro
+      const url = `http://192.168.53.193:5000/pendencias?t=${timestamp}${force ? '&force=true' : ''}`;
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        }
       /* Metodo de produção
        const response = await fetch("/api/pendencias", {
-       */
-      const response = await fetch("http://192.168.2.100:5000/pendencias", {
-        method: 'GET'
+       
+      const response = await fetch("http://192.168.53.193:5000/pendencias", {
+        method: 'GET' */
       });
 
       if (!response.ok) {
@@ -152,7 +163,10 @@ export class PainelComponent implements OnInit {
 
       // Atualiza o estado do painel
       this.inspections.set(parsedInspections);
-
+      if (force) {
+        // Se quiser algo mais sutil, use um Toast, mas por enquanto:
+        console.log('✅ Lista atualizada manualmente com sucesso!');
+      }
     } catch (err) {
       console.error('Erro ao buscar dados da API:', err);
 
@@ -166,7 +180,10 @@ export class PainelComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
-  }
+  };
+  recarregarManual() {
+    this.fetchInspections(true);
+}
 
   reloadPage() {
     window.location.reload();
@@ -247,7 +264,7 @@ export class PainelComponent implements OnInit {
 
     console.log('ENVIANDO CANCELAMENTO:', payload);
 
-    const response = await fetch('http://192.168.2.100:5000/cancelar', {
+    const response = await fetch('http://192.168.53.193:5000/cancelar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)

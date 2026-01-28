@@ -1,153 +1,131 @@
-<!-- Cabeçalho -->
-<div class="mb-6">
-  <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900">
-    Histórico de Vistorias
-  </h1>
-  <p class="text-sm text-gray-500 mt-1">
-    Consulte todas as vistorias registradas
-  </p>
-</div>
+<div class="p-4 space-y-4">
 
-<!-- Filtros -->
-<input type="text" placeholder="🔍 Buscar por placa" class="border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
-  [value]="buscaPlaca()" (input)="formatarPlacaInput($any($event.target).value)" />
+  <!-- HEADER -->
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-semibold">Histórico de Vistorias</h2>
 
-
-<input type="text" placeholder="🚚 Buscar por transportadora"
-  class="border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500" [value]="buscaTransp()"
-  (input)="buscaTransp.set($any($event.target).value)" />
-
-
-
-
-<select class="border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
-  (change)="ordemSelecionada.set($any($event.target).value)">
-  <option value="desc">⬇️ Mais recentes</option>
-  <option value="asc">⬆️ Mais antigas</option>
-</select>
-
-
-<!-- Cards resumo -->
-<div class="grid grid-cols-3 gap-3 mb-6">
-  <div class="bg-white p-4 rounded-xl shadow text-center">
-    <p class="text-xs text-gray-500">Total</p>
-    <p class="text-2xl font-bold">{{ historicoFiltrado().length }}</p>
+    <button
+      class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
+      (click)="voltar()">
+      Voltar
+    </button>
   </div>
 
-  <div class="bg-white p-4 rounded-xl shadow text-center">
-    <p class="text-xs text-gray-500">Canceladas</p>
-    <p class="text-2xl font-bold text-red-600">{{ totalCanceladas() }}</p>
+  <!-- FILTROS -->
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+
+    <!-- BUSCA PLACA -->
+    <input
+      type="text"
+      placeholder="Placa (AAA-1234)"
+      class="border rounded p-2"
+      [value]="buscaPlaca()"
+      (input)="formatarPlacaInput($any($event.target).value)" />
+
+    <!-- BUSCA TRANSPORTADORA -->
+    <input
+      type="text"
+      placeholder="Transportadora"
+      class="border rounded p-2"
+      [value]="buscaTransp()"
+      (input)="buscaTransp.set($any($event.target).value)" />
+
+    <!-- ORDEM -->
+    <select
+      class="border rounded p-2"
+      [value]="ordemSelecionada()"
+      (change)="ordemSelecionada.set($any($event.target).value)">
+      <option value="desc">Mais recentes</option>
+      <option value="asc">Mais antigos</option>
+    </select>
+
   </div>
 
-  <div class="bg-white p-4 rounded-xl shadow text-center">
-    <p class="text-xs text-gray-500">Concluídas</p>
-    <p class="text-2xl font-bold text-green-600">{{ totalConcluidas() }}</p>
+  <!-- CONTADORES -->
+  <div class="flex gap-4 text-sm">
+    <span class="text-green-600">
+      Concluídas: {{ totalConcluidas() }}
+    </span>
+    <span class="text-red-600">
+      Canceladas: {{ totalCanceladas() }}
+    </span>
   </div>
-</div>
 
-<!-- MOBILE: Cards -->
-<div class="space-y-3 sm:hidden">
-  @for (item of historicoFiltrado(); track item.id) {
-  <div class="bg-white rounded-xl shadow p-4 space-y-2">
-    <div class="flex justify-between items-center">
-      <span class="font-bold text-lg">{{ item.placa }}</span>
-      <span class="text-sm font-semibold" [class.text-green-600]="item.status === 'Concluida'"
-        [class.text-red-600]="item.status === 'Cancelada'">
-        {{ item.status }}
-      </span>
+  <!-- LOADING / ERRO -->
+  <div *ngIf="carregando()" class="text-gray-500">
+    Carregando histórico...
+  </div>
+
+  <div *ngIf="erro()" class="text-red-600">
+    {{ erro() }}
+  </div>
+
+  <!-- LISTA -->
+<div class="space-y-2" *ngIf="!carregando()">
+
+  <div
+    *ngFor="let h of historicoFiltrado()"
+    class="border rounded-lg p-4 flex justify-between items-center
+           cursor-pointer select-none
+           hover:bg-indigo-50 hover:border-indigo-400
+           transition"
+    [class.opacity-60]="!h.pdf"
+    (click)="h.pdf && abrirPdf(h.pdf)">
+
+    <!-- INFO -->
+    <div>
+      <div class="font-semibold text-lg">{{ h.placa }}</div>
+
+      <div class="text-sm text-gray-600">
+        {{ h.data }} • {{ h.hora }}
+      </div>
+
+      <div class="text-sm text-gray-600">
+        {{ h.transportadora }}
+      </div>
+
+      <div
+        class="text-sm font-medium mt-1"
+        [class.text-green-600]="h.status === 'Concluida'"
+        [class.text-red-600]="h.status === 'Cancelada'">
+        {{ h.status }}
+      </div>
     </div>
 
-    <p class="text-sm text-gray-600">
-      📅 {{ item.data }} • ⏰ {{ item.hora }}
-    </p>
-
-    <p class="text-sm">
-      <strong>Pré-ordem:</strong> {{ item.pre_Ordem || '—' }}
-    </p>
-
-    <p class="text-sm">
-      <strong>Transportadora:</strong> {{ item.transportadora || '—' }}
-    </p>
-
-    <div class="flex justify-between items-center pt-2">
-      <span class="text-xs text-gray-500">{{ item.vistoriador }}</span>
-
-      <button *ngIf="item.pdf" type="button" (click)="abrirPdf(item.pdf)"
-        class="px-3 py-1 bg-indigo-600 text-white rounded-lg font-semibold">
-        📄 PDF
-      </button>
-
+    <!-- INDICADOR PDF -->
+    <div
+      class="px-3 py-2 rounded text-white text-sm font-semibold"
+      [class.bg-indigo-600]="h.pdf"
+      [class.bg-gray-400]="!h.pdf">
+      📄 PDF
     </div>
+
   </div>
-  }
+
 </div>
 
-<!-- DESKTOP: Tabela -->
-<div class="hidden sm:block bg-white rounded-2xl shadow overflow-x-auto">
-  <table class="min-w-full text-sm">
-    <thead class="bg-gray-50">
-      <tr>
-        <th class="px-3 py-2 text-left">Placa</th>
-        <th class="px-3 py-2">Data</th>
-        <th class="px-3 py-2">Hora</th>
-        <th class="px-3 py-2">Pré-ordem</th>
-        <th class="px-3 py-2">Transportadora</th>
-        <th class="px-3 py-2">Status</th>
-        <th class="px-3 py-2">PDF</th>
-      </tr>
-    </thead>
-
-    <tbody class="divide-y">
-      @for (item of historicoFiltrado(); track item.id) {
-      <tr class="hover:bg-gray-50">
-        <td class="px-3 py-2 font-semibold">{{ item.placa }}</td>
-        <td class="px-3 py-2">{{ item.data }}</td>
-        <td class="px-3 py-2">{{ item.hora }}</td>
-        <td class="px-3 py-2">{{ item.pre_Ordem }}</td>
-        <td class="px-3 py-2">{{ item.transportadora }}</td>
-        <td class="px-3 py-2 font-semibold" [class.text-green-600]="item.status === 'Concluida'"
-          [class.text-red-600]="item.status === 'Cancelada'">
-          {{ item.status }}
-        </td>
-        <td class="px-3 py-2">
-          <button *ngIf="item.pdf" type="button" (click)="abrirPdf(item.pdf)"
-            class="px-3 py-1 bg-indigo-600 text-white rounded-lg font-semibold">
-            📄 PDF
-          </button>
-
-        </td>
-      </tr>
-      }
-    </tbody>
-  </table>
-</div>
 
 <!-- MODAL PDF -->
-<div *ngIf="modalAberto()"
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-2">
+<div
+  *ngIf="modalAberto()"
+  class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
 
-  <div class="bg-white w-full max-w-4xl h-[80vh] rounded-xl shadow-lg flex flex-col overflow-hidden">
+  <div class="bg-white w-[95%] h-[95%] rounded-lg relative overflow-hidden">
 
-    <!-- Header -->
-    <div class="flex justify-between items-center px-4 py-3 border-b">
-      <h2 class="font-semibold text-gray-800">Visualização do Documento</h2>
-      <button (click)="fecharModal()" class="text-gray-500 hover:text-red-500 text-xl font-bold">
-        ✕
-      </button>
-    </div>
+    <!-- FECHAR -->
+    <button
+      class="absolute top-3 right-3 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center"
+      (click)="fecharModal()">
+      ✕
+    </button>
 
-    <!-- Conteúdo -->
-    <div class="flex-1 bg-gray-100">
-      <iframe *ngIf="pdfSelecionado()" [src]="pdfSelecionado()" class="w-full h-full border-none">
-      </iframe>
-    </div>
-
-    <!-- Footer -->
-    <div class="p-3 border-t flex justify-end">
-      <button (click)="fecharModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-        Fechar
-      </button>
-    </div>
+    <!-- PDF -->
+    <iframe
+      *ngIf="pdfSelecionado()"
+      [src]="pdfSelecionado()"
+      class="w-full h-full"
+      frameborder="0">
+    </iframe>
 
   </div>
 </div>

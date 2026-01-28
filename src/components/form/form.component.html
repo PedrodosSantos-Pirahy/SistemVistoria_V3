@@ -4,17 +4,6 @@
 -->
 <div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
 
-  <!-- Overlay de Loading -->
-  <div *ngIf="isSubmitting()" class="fixed inset-0 z-50 bg-black bg-opacity-40 flex items-center justify-center">
-    <div class="bg-white p-6 rounded shadow-lg flex items-center gap-3">
-      <svg class="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-      </svg>
-      <span>Enviando vistoria...</span>
-    </div>
-  </div>
-
   @if (submittedData()) {
     <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6" role="alert">
       <p class="font-bold">Dados Enviados com Sucesso!</p>
@@ -46,7 +35,7 @@
               <span class="text-base font-semibold text-indigo-700">Etapa {{ currentStep() }} de {{ totalSteps }}</span>
               <span class="text-sm font-medium text-gray-600 ml-2">{{ currentStepName() }}</span>
             </div>
-            <span class="text-sm font-medium text-indigo-700">{{ ((currentStep() -1) / totalSteps * 100).toFixed(0) }}% Completo</span>
+            <span class="text-sm font-medium text-indigo-700">{{ ((currentStep() ) / totalSteps * 100).toFixed(0) }}% Completo</span>
         </div>
         <div class="w-full bg-gray-200 rounded-full h-2.5">
             <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" [style.width.%]="((currentStep() -1) / totalSteps) * 100"></div>
@@ -89,6 +78,63 @@
                 }
               </div>
             </div>
+           <!-- LOCAL DA VISTORIA -->
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              Local da vistoria <span class="text-red-600">*</span>
+            </label>
+
+            <div class="flex gap-6">
+
+              <!-- FILIAL -->
+              <label
+                class="flex items-center gap-2 cursor-pointer
+                      border rounded-md px-4 py-2
+                      hover:border-gray-500
+                      transition"
+                [class.border-indigo-600]="form.get('dadosIniciais.localVistoria')?.value === 'Filial'">
+
+                <input
+                  type="radio"
+                  formControlName="localVistoria"
+                  value="Filial"
+                  class="accent-indigo-600" />
+
+                <span class="text-sm text-gray-800">Filial</span>
+              </label>
+
+              <!-- MATRIZ -->
+              <label
+                class="flex items-center gap-2 cursor-pointer
+                      border rounded-md px-4 py-2
+                      hover:border-gray-500
+                      transition"
+                [class.border-indigo-600]="form.get('dadosIniciais.localVistoria')?.value === 'Matriz'">
+
+                <input
+                  type="radio"
+                  formControlName="localVistoria"
+                  value="Matriz"
+                  class="accent-indigo-600" />
+
+                <span class="text-sm text-gray-800">Matriz</span>
+              </label>
+
+            </div>
+
+            <!-- ERRO -->
+            <div
+              *ngIf="
+                form.get('dadosIniciais.localVistoria')?.touched &&
+                form.get('dadosIniciais.localVistoria')?.invalid
+              "
+              class="text-xs text-red-600 mt-1">
+              Campo obrigatório.
+            </div>
+          </div>
+
+
+
 
             <!-- Nº Ordem -->
             <div>
@@ -697,6 +743,7 @@
         }
       </div>
     </div>
+    
   </form>
 
 <!-- FULLSCREEN SIGNATURE MODAL -->

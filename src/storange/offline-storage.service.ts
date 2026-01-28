@@ -38,4 +38,15 @@ export class OfflineStorageService {
     const db = await this.dbPromise;
     await db.delete('drafts', id);
   }
+  // Adicione este método na classe:
+  async removerDraft(id: string): Promise<void> {
+    try {
+      console.log('🗑️ Removendo draft do ID:', id);
+      // Chama o método que realmente deleta no banco 'drafts'
+    await this.deletarPorVistoriaId(id);
+      console.log('✅ Draft removido com sucesso!');
+    } catch (error) {
+      console.error('❌ Erro ao limpar draft:', error);
+    }
+  }
 }

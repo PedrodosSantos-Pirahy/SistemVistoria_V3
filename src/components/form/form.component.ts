@@ -72,7 +72,9 @@ export class FormComponent implements OnDestroy {
       operacao: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
       produto: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
       ultimosProdutos: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
-      tipoVeiculo: new FormControl('', { nonNullable: true, validators: [Validators.required] })
+      tipoVeiculo: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+      localVistoria: new FormControl('', { nonNullable: true,validators: [Validators.required]})
+
     }),
     inspecaoInterna: new FormGroup({
       limpeza: new FormGroup({
@@ -205,7 +207,7 @@ export class FormComponent implements OnDestroy {
     placaForm: string
   ): Promise<OrdemTransportadora | null> {
     try {
-      const response = await fetch('http://192.168.2.100:5000/pendencias');
+      const response = await fetch('http://192.168.53.193:5000/pendencias');
 
       if (!response.ok) {
         console.error('Erro ao buscar pendências');
@@ -249,7 +251,7 @@ export class FormComponent implements OnDestroy {
 
   async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
     try {
-      const response = await fetch('http://192.168.2.100:5000/pendencias');
+      const response = await fetch('http://192.168.53.193:5000/pendencias');
 
       if (!response.ok) {
         console.error('Erro ao buscar pendências');
@@ -353,6 +355,36 @@ export class FormComponent implements OnDestroy {
 
         this.form.patchValue(draft.payload);
         this.currentStep.set(draft.stepAtual ?? 1);
+        const fotos = draft.payload?.fotosVistoria;
+
+        if (fotos?.placas?.fotoPlaca1) {
+          this.placa1Preview.set(fotos.placas.fotoPlaca1);
+        }
+        if (fotos?.placas?.fotoPlaca2) {
+          this.placa2Preview.set(fotos.placas.fotoPlaca2);
+        }
+        if (fotos?.placas?.fotoPlaca3) {
+          this.placa3Preview.set(fotos.placas.fotoPlaca3);
+        }
+        if (fotos?.interiorCarroceria?.fotoInterior1) {
+          this.interior1Preview.set(fotos.interiorCarroceria.fotoInterior1);
+        }
+        if (fotos?.interiorCarroceria?.fotoInterior2) {
+          this.interior2Preview.set(fotos.interiorCarroceria.fotoInterior2);
+        }
+
+        setTimeout(() => {
+          const motorista = this.form.controls.finalizacao.controls.motoristaAssinatura.value;
+          const vistoriador = this.form.controls.finalizacao.controls.vistoriadorAssinatura.value;
+
+          if (motorista && this.motoristaCanvas?.nativeElement) {
+            this.renderSignatureToCanvas(this.motoristaCanvas.nativeElement, motorista);
+          }
+
+          if (vistoriador && this.vistoriadorCanvas?.nativeElement) {
+            this.renderSignatureToCanvas(this.vistoriadorCanvas.nativeElement, vistoriador);
+          }
+        }, 300);
 
         alert('🔄 Encontramos uma vistoria em andamento. Seus dados foram restaurados.');
       }
@@ -365,6 +397,16 @@ export class FormComponent implements OnDestroy {
     this.veiculoSubscription =
       this.form.controls.dadosIniciais.controls.tipoVeiculo.valueChanges
         .subscribe(value => this.updateValidators(value));
+
+    window.addEventListener('online', () => {
+      console.log('🌐 Internet restaurada');
+      this.submissionError.set(null);
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('📴 Internet perdida');
+    });
+
   }
 
 
@@ -439,18 +481,24 @@ export class FormComponent implements OnDestroy {
 
     this.form.valueChanges
       .pipe(debounceTime(500))
-      .subscribe(value => {
+      .subscribe(() => {
+
+        if (this.isSubmitting()) return;
+
         if (!this.vistoriaId()) return;
+
+        const payloadCompleto = this.form.getRawValue(); // 🔑 CHAVE DO PROBLEMA
 
         this.offlineStorage.salvarResposta({
           vistoriaId: this.vistoriaId(),
-          placa: this.form.get('fotosVistoria.placas.placa1')?.value,
+          placa: payloadCompleto.fotosVistoria?.placas?.placa1,
           stepAtual: this.currentStep(),
-          payload: value,
+          payload: payloadCompleto,
           atualizadoEm: new Date().toISOString(),
           sincronizado: false
         });
       });
+
 
   }
 
@@ -498,6 +546,15 @@ export class FormComponent implements OnDestroy {
     if (dataURL) {
       alert('Assinatura salva! Pode fechar esta tela.');
     }
+    window.addEventListener('online', () => {
+      console.log('🌐 Internet restaurada');
+      this.submissionError.set(null);
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('📴 Internet perdida');
+    });
+
 
   }
 
@@ -919,84 +976,147 @@ export class FormComponent implements OnDestroy {
       + `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
 
-  readonly finished = output<void>();
-
-  async onSubmit() {
-    this.form.markAllAsTouched();
-    if (!this.form.valid) {
-      console.error('Formulário inválido.');
-      return;
-    }
-
-    this.isSubmitting.set(true);
-
-    // Atualiza a barra para 100%
-    this.currentStep.update(() => this.totalSteps);
-
-    this.submissionError.set(null);
-    this.submittedData.set(null);
-
-    // Prepara os dados do formulário
-    const dados = this.form.controls.dadosIniciais.controls;
-    this.form.controls.dadosIniciais.controls.fim.setValue(this.formatarParaBanco(new Date()));
-
-    if (dados.chegada.value) {
-      dados.chegada.setValue(this.formatarParaBanco(new Date(dados.chegada.value)));
-    }
-
-    if (dados.vistoria.value) {
-      dados.vistoria.setValue(this.formatarParaBanco(new Date(dados.vistoria.value)));
-    }
-
-    const rawValue = this.form.getRawValue();
-    const payload = {
-      id: this.vistoriaId(), // 🔑 ID TÉCNICO (NÃO VISUAL)
-      ...this.processFormValue(rawValue)
-    };
-    console.log('📦 PAYLOAD ENVIADO PARA /vistoria:');
-    console.log(payload);
-    console.log('📦 PAYLOAD STRINGIFY:');
-    console.log(JSON.stringify(payload, null, 2));
-
-    // Navega para o painel imediatamente
-    this.finished.emit();
-    alert('"A vistoria está sendo enviada em segundo plano. Evite fechar ou recarregar a página até receber confirmação no sistema."');
-    this.router.navigate(['/painel']);
-    window.scrollTo(0, 0);
-
-    // Envia os dados em background (fire-and-forget)
-    fetch('http://192.168.2.100:5000/vistoria', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-      .then(async response => {
-        if (!response.ok) {
-          let errorBody;
-          try {
-            errorBody = await response.json();
-          } catch {
-            errorBody = await response.text();
-          }
-          console.error('Erro no servidor:', errorBody);
-          return;
-        }
-
-        const responseData = await response.json();
-        console.log('✅ Vistoria enviada com sucesso!', responseData);
-
-        const id = this.vistoriaId();
-        if (id) {
-          await this.offlineStorage.deletarPorVistoriaId(id);
-          console.log('🗑️ Draft offline removido com sucesso');
-        }
-      })
-
-      .catch(err => {
-        console.error('Erro de rede ao enviar vistoria:', err);
-      })
-      .finally(() => {
-        this.isSubmitting.set(false);
-      });
+private async podeEnviarParaApi(): Promise<boolean> {
+  // 1. Verifica internet básica (Wifi/Dados)
+  if (!navigator.onLine) {
+    alert('Sem conexão de rede. Verifique o Wifi ou 4G.');
+    return false;
   }
+ 
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 segundos timeout
+ 
+    // 🔑 TRUQUE ANTI-CACHE:
+    // Adicionamos ?t=... com a hora atual para o navegador achar que é uma url nova
+    // e não usar a memória antiga.
+    const timestamp = new Date().getTime();
+    const urlTeste = `http://192.168.53.193:5000/pendencias?noCache=${timestamp}`;
+ 
+    const resp = await fetch(urlTeste, {
+      method: 'GET',
+      cache: 'no-store', // Força não usar cache
+      headers: { 
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
+      },
+      signal: controller.signal
+    });
+ 
+    clearTimeout(timeoutId);
+ 
+    if (resp.ok) {
+      return true;
+    } else {
+      alert(`Servidor conectado, mas respondeu com erro: ${resp.status}`);
+      return false;
+    }
+ 
+  } catch (error) {
+    // Se caiu aqui, é porque falhou MESMO (timeout ou sem rede)
+    alert('Falha ao conectar com o servidor (192.168.53.193). Verifique se ele está ligado.');
+    return false;
+  }
+}
+  
+  readonly finished = output<void>();
+ 
+  // 2. Método Principal de Envio (onSubmit)
+
+// form.component.ts -> Substitua o método onSubmit por este ajustado
+
+async onSubmit() {
+  this.form.markAllAsTouched();
+
+  if (!this.form.valid) {
+    alert('Existem campos obrigatórios não preenchidos. Verifique as abas em vermelho.');
+    return;
+  }
+
+  // 1. TRAVA IMEDIATA (Evita clique duplo)
+  this.isSubmitting.set(true); 
+  this.submissionError.set(null);
+
+  // 2. Validação de Conexão
+  const conexaoOk = await this.podeEnviarParaApi();
+  if (!conexaoOk) {
+    this.isSubmitting.set(false); // Destrava se falhar a internet
+    return; 
+  }
+
+  // 3. Preparação dos Dados (SILENCIOSA)
+  
+  // Muda o step sem avisar o valueChanges
+  // (Isso evita disparar o auto-save na hora do envio)
+  // Nota: currentStep é um signal, então ele não dispara valueChanges do form,
+  // mas se você tivesse logic de form dependente, seria aqui.
+  this.currentStep.update(() => this.totalSteps);
+
+  this.submittedData.set(null);
+
+  // 4. Formatação de Datas (SILENCIOSA)
+  // O uso de { emitEvent: false } é CRUCIAL aqui.
+  // Ele muda o valor mas NÃO dispara o valueChanges do ngOnInit.
+  const nowStr = this.formatarParaBanco(new Date());
+  
+  this.form.controls.dadosIniciais.controls.fim.setValue(nowStr, { emitEvent: false });
+
+  // Pega os dados crus
+  const rawValue = this.form.getRawValue();
+
+  // Cria Payload
+  const payload = {
+    id: this.vistoriaId(),
+    ...this.processFormValue(rawValue)
+  };
+
+  // Garante datas no payload
+  payload.dadosIniciais.fim = nowStr;
+
+  const chegadaOriginal = rawValue.dadosIniciais.chegada;
+  if (chegadaOriginal && !chegadaOriginal.includes('/')) {
+      payload.dadosIniciais.chegada = this.formatarParaBanco(new Date(chegadaOriginal));
+  }
+  
+  const vistoriaOriginal = rawValue.dadosIniciais.vistoria;
+  if (vistoriaOriginal && !vistoriaOriginal.includes('/')) {
+      payload.dadosIniciais.vistoria = this.formatarParaBanco(new Date(vistoriaOriginal));
+  }
+
+  // 5. Limpeza do Rascunho (CRÍTICO)
+  // Fazemos isso ANTES do fetch de background para garantir que não sobre nada.
+  const idParaRemover = this.vistoriaId();
+  if (idParaRemover) {
+      // Como isSubmitting está true, o auto-save está pausado.
+      // Podemos deletar com segurança.
+      await this.offlineStorage.removerDraft(idParaRemover);
+  }
+
+  // 6. Feedback e Saída
+  alert('Conexão validada! A vistoria será enviada em segundo plano.');
+  this.finished.emit();
+  this.router.navigate(['/painel']);
+  window.scrollTo(0, 0);
+
+  // 7. Envio Background
+  fetch('http://192.168.53.193:5000/vistoria', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  .then(async response => {
+    if (!response.ok) {
+      console.error('Erro silencioso (Background):', response.statusText);
+    } else {
+      console.log('✅ Sucesso (Background): Servidor recebeu.');
+    }
+  })
+  .catch(err => {
+    console.error('❌ Erro de rede (Background):', err);
+  })
+  .finally(() => {
+    // Só destrava depois de tudo (embora o usuário já tenha saído da tela)
+    this.isSubmitting.set(false);
+  });
+}
 }

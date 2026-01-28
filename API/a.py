@@ -13,14 +13,24 @@ from google_auth_httplib2 import AuthorizedHttp
 import httplib2
 
 # --------------------------------------------------------------------------
+# CONFIGURAÇÃO DE LOGS (LIMPO E PADRONIZADO)
+# --------------------------------------------------------------------------
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt='%H:%M:%S')
+log = logging.getLogger("historico-api")
+
+# 🤫 Silenciar bibliotecas externas
+logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+logging.getLogger("oauth2client").setLevel(logging.WARNING)
+
+log.info("=== 📜 HISTÓRICO API: DEBUG INICIAL ===")
+log.info("Diretório atual (cwd): %s", os.getcwd())
+
+# --------------------------------------------------------------------------
 # Config Flask
 # --------------------------------------------------------------------------
 app = Flask(__name__)
 CORS(app)
-
-logging.basicConfig(level=logging.INFO,
-                    format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("historico-api")
 
 # --------------------------------------------------------------------------
 # Config Google Sheets / Service Account
@@ -28,9 +38,11 @@ log = logging.getLogger("historico-api")
 BASE_DIR = Path(__file__).resolve().parent
 SERVICE_ACCOUNT_PATH = BASE_DIR / "service-account.json"
 
+log.info("SERVICE ACCOUNT: %s", SERVICE_ACCOUNT_PATH)
+
 if not SERVICE_ACCOUNT_PATH.exists():
-    raise RuntimeError(
-        f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
+    log.critical("❌ Service account não encontrado!")
+    raise RuntimeError(f"Service account não encontrado: {SERVICE_ACCOUNT_PATH}")
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -55,46 +67,50 @@ sheets_service = build(
 # --------------------------------------------------------------------------
 # Configurações do Sheet
 # --------------------------------------------------------------------------
-SHEET_ID = os.getenv(
-    "SHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
+SHEET_ID = os.getenv("SHEET_ID", "1OypeFbnDkBMWNYSqH36DJYtR8l4lapWwG9j44fdzTXw")
 HISTORICO_TAB = "Agend_V2"
 
 # --------------------------------------------------------------------------
 # Helpers
 # --------------------------------------------------------------------------
 
-
 def validar_payload(payload: dict) -> bool:
     obrigatorios = ["ID", "Pré-Ordem", "Vistoriador", "Placa"]
-    return all(k in payload for k in obrigatorios)
+    missing = [k for k in obrigatorios if k not in payload]
+    if missing:
+        log.warning("⚠️ [VALIDAR] Campos faltando: %s", missing)
+    return len(missing) == 0
 
 
 def sheets_append_row(values: list):
     """Insere uma linha no Google Sheets"""
+    log.info("📝 [SHEETS] Inserindo nova linha...")
     body = {"values": [values]}
     result = sheets_service.values().append(
         spreadsheetId=SHEET_ID,
-        range=f"{HISTORICO_TAB}!A2:Z5000",
+        range=f"{HISTORICO_TAB}!A2:AB5000",
         valueInputOption="RAW",
         insertDataOption="INSERT_ROWS",
         body=body
     ).execute()
     updated_range = result["updates"]["updatedRange"]
-    log.info("Linha inserida no Sheets: %s", updated_range)
+    log.info("✅ [SHEETS] Linha inserida com sucesso: %s", updated_range)
     return updated_range
 
 
 def sheets_read_rows():
     """Lê todas as linhas do histórico do Sheets"""
+    log.info("🔄 [SHEETS] Lendo histórico completo...")
     result = sheets_service.values().get(
         spreadsheetId=SHEET_ID,
-        range=f"{HISTORICO_TAB}!A2:Z5000"
+        range=f"{HISTORICO_TAB}!A2:AB5000"
     ).execute()
-    return result.get("values", [])
+    values = result.get("values", [])
+    log.info("✅ [SHEETS] Total de linhas lidas: %d", len(values))
+    return values
 
 
 def safe_get(r, idx):
-
     return r[idx] if len(r) > idx else ""
 
 
@@ -103,6 +119,7 @@ def safe_get(r, idx):
 # --------------------------------------------------------------------------
 @app.get("/")
 def home():
+    log.info("📞 GET / (Healthcheck)")
     return jsonify({"status": "API de Histórico online"})
 
 
@@ -110,13 +127,15 @@ def home():
 def criar_historico():
     payload = request.json
     if not payload:
+        log.warning("⚠️ [POST] Payload vazio recebido")
         return jsonify({"error": "Payload vazio"}), 400
+
+    log.info("➕ [POST] Nova solicitação | ID: %s | Placa: %s", payload.get("ID"), payload.get("Placa"))
 
     if not validar_payload(payload):
         return jsonify({"error": "Campos obrigatórios ausentes"}), 400
 
-    payload["data"] = payload.get(
-        "data") or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+    payload["data"] = payload.get("data") or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
     row = [
         payload["ID"],
@@ -128,31 +147,34 @@ def criar_historico():
         payload["vr"],
         payload["cl"],
         payload["Vistoriador"],
-        payload["Pdf"]
+        payload["PDF"]
     ]
 
     try:
         sheets_append_row(row)
     except Exception as e:
-        log.exception("Erro ao salvar no Sheets")
+        log.exception("❌ [POST] Erro crítico ao salvar no Sheets")
         return jsonify({"error": str(e)}), 500
 
+    log.info("✅ [POST] Histórico salvo com sucesso.")
     return jsonify({"status": "ok", "historico": payload}), 201
 
 
 @app.get("/historico")
 def listar_historico():
     filtro_id = request.args.get("id")
+    log.info("🔍 [GET] Listando histórico | Filtro ID: %s", filtro_id if filtro_id else "TODOS")
+
     try:
         rows = sheets_read_rows()
     except Exception as e:
-        log.exception("Erro ao ler do Sheets")
+        log.exception("❌ [GET] Erro ao ler do Sheets")
         return jsonify({"error": str(e)}), 500
 
     historico = []
 
     for r in rows:
-        # Ignora linhas que sejam títulos ou vazias
+        # Ignora linhas que sejam títulos ou vazias (Mantido lógica original)
         if not r or r[0] == "Placa":
             continue
 
@@ -167,14 +189,17 @@ def listar_historico():
             "vr": safe_get(r, 10),
             "cl": safe_get(r, 11),
             "Vistoriador": safe_get(r, 12),
-            "Pdf": safe_get(r, 26)
+            "PDF": safe_get(r, 27)
         }
 
-        if filtro_id and item["id"] != filtro_id:
+        # Correção pequena: usei .get("ID") para garantir consistência com o objeto criado acima
+        # Se sua planilha usa ID na coluna 24, a lógica está mantida.
+        if filtro_id and item["ID"] != filtro_id:
             continue
 
         historico.append(item)
 
+    log.info("✅ [GET] Retornando %d registros", len(historico))
     return jsonify({"status": "ok", "total": len(historico), "historico": historico})
 
 
@@ -182,5 +207,6 @@ def listar_historico():
 # Run
 # --------------------------------------------------------------------------
 if __name__ == "__main__":
-    log.info("Subindo API de Histórico (DEV)")
+    log.info("🚀 SUBINDO API DE HISTÓRICO (DEV)")
+    # Host e Porta originais
     app.run(host="0.0.0.0", port=5002)

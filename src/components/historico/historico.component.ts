@@ -10,6 +10,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 /* =======================
    Interface
@@ -24,7 +25,7 @@ interface Historico {
   status: 'Concluida' | 'Cancelada';
   liberacao: string;
   vistoriador: string;
-  pdf: string;
+  pdf: string; // 👉 agora é SÓ O ID
 }
 
 /* =======================
@@ -41,6 +42,7 @@ export class HistoricoComponent implements OnInit {
 
   private http = inject(HttpClient);
   private router = inject(Router);
+  private sanitizer = inject(DomSanitizer);
 
   /* =======================
      State
@@ -52,6 +54,9 @@ export class HistoricoComponent implements OnInit {
 
   carregando = signal(false);
   erro = signal<string | null>(null);
+
+  modalAberto = signal(false);
+  pdfSelecionado = signal<SafeResourceUrl | null>(null);
 
   /* =======================
      Lifecycle
@@ -67,28 +72,16 @@ export class HistoricoComponent implements OnInit {
     this.carregando.set(true);
     this.erro.set(null);
 
-    this.http.get<any>('http://192.168.2.100:5002/historico')
+    this.http.get<any>('http://192.168.53.193:5002/historico')
       .subscribe({
         next: res => {
           const dados: Historico[] = (res?.historico ?? [])
             .map((h: any) => {
-              const statusNormalizado = (h.vr ?? '')
-                .toString()
-                .trim()
-                .toLowerCase();
+              const status = (h.vr ?? '').toLowerCase().trim();
 
-              let statusFinal: 'Concluida' | 'Cancelada' | null = null;
-
-              if (statusNormalizado === 'concluida' || statusNormalizado === 'concluído') {
-                statusFinal = 'Concluida';
+              if (!['concluida', 'concluído', 'cancelada', 'cancelado'].includes(status)) {
+                return null;
               }
-
-              if (statusNormalizado === 'cancelada' || statusNormalizado === 'cancelado') {
-                statusFinal = 'Cancelada';
-              }
-
-              // 🚫 ignora qualquer outro status
-              if (!statusFinal) return null;
 
               return {
                 id: `${h.Placa}-${h.Data}-${h['Hora Inicio']}`,
@@ -97,10 +90,10 @@ export class HistoricoComponent implements OnInit {
                 hora: h['Hora Inicio'] ?? '',
                 pre_Ordem: h.po ?? '',
                 transportadora: h.Transportadora ?? '',
-                status: statusFinal,
+                status: status.startsWith('conclu') ? 'Concluida' : 'Cancelada',
                 liberacao: h.cl ?? '',
                 vistoriador: h.Vistoriador ?? '',
-                pdf: h.Pdf ?? ''
+                pdf: h.PDF ?? '' // 👉 SÓ O ID
               } as Historico;
             })
             .filter(Boolean) as Historico[];
@@ -116,34 +109,24 @@ export class HistoricoComponent implements OnInit {
   }
 
   /* =======================
-     Computed: filtro + ordenação
+     Computed
   ======================= */
   historicoFiltrado = computed(() => {
     const placaFiltro = this.normalizarPlaca(this.buscaPlaca());
-    const transpFiltro = this.buscaTransp().trim().toUpperCase();
+    const transpFiltro = this.buscaTransp().toUpperCase();
 
-    const filtrado = this.historico().filter(h => {
-      const placaHistorico = this.normalizarPlaca(h.placa);
-
-      return (
-        placaHistorico.includes(placaFiltro) &&
+    return [...this.historico()]
+      .filter(h =>
+        this.normalizarPlaca(h.placa).includes(placaFiltro) &&
         h.transportadora.toUpperCase().includes(transpFiltro)
-      );
-    });
-
-    return [...filtrado].sort((a, b) => {
-      const dataA = this.parseDataHora(a.data, a.hora);
-      const dataB = this.parseDataHora(b.data, b.hora);
-
-      return this.ordemSelecionada() === 'asc'
-        ? dataA - dataB
-        : dataB - dataA;
-    });
+      )
+      .sort((a, b) => {
+        const da = this.parseDataHora(a.data, a.hora);
+        const db = this.parseDataHora(b.data, b.hora);
+        return this.ordemSelecionada() === 'asc' ? da - db : db - da;
+      });
   });
 
-  /* =======================
-     Computed: contadores
-  ======================= */
   totalCanceladas = computed(() =>
     this.historicoFiltrado().filter(h => h.status === 'Cancelada').length
   );
@@ -153,63 +136,54 @@ export class HistoricoComponent implements OnInit {
   );
 
   /* =======================
-     Helpers
+     PDF
   ======================= */
-  private parseDataHora(data: string, hora: string): number {
-    if (!data) return 0;
+abrirPdf(valor: string): void {
+  if (!valor) return;
 
-    const [dia, mes, ano] = data.split('/').map(Number);
-    const [hh = 0, mm = 0] = (hora ?? '').split(':').map(Number);
+  let fileId = valor.trim();
 
-    return new Date(ano, mes - 1, dia, hh, mm).getTime();
+  // 🧠 Se vier URL completa, extrai o ID
+  const match = fileId.match(/\/d\/([^/]+)/) || fileId.match(/id=([^&]+)/);
+  if (match) {
+    fileId = match[1];
   }
-  /* =======================
-     Placa helpers (formatação)
-  ======================= */
-  private normalizarPlaca(valor: string): string {
-    return valor
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, '');
-  }
-  /* =======================
-     Modal PDF
-  ======================= */
-  modalAberto = signal(false);
-  pdfSelecionado = signal<string | null>(null);
 
-  abrirPdf(pdfUrl: string): void {
-    if (!pdfUrl) return;
+  // 🔥 SEMPRE gera preview padrão
+  const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
 
-    // força visualização no Drive
-    const url = pdfUrl.includes('preview')
-      ? pdfUrl
-      : pdfUrl.replace('/view', '/preview');
+  this.pdfSelecionado.set(
+    this.sanitizer.bypassSecurityTrustResourceUrl(previewUrl)
+  );
+  this.modalAberto.set(true);
+}
 
-    this.pdfSelecionado.set(url);
-    this.modalAberto.set(true);
-  }
 
   fecharModal(): void {
     this.modalAberto.set(false);
     this.pdfSelecionado.set(null);
   }
 
+  /* =======================
+     Helpers
+  ======================= */
+  private parseDataHora(data: string, hora: string): number {
+    const [d, m, y] = data.split('/').map(Number);
+    const [hh = 0, mm = 0] = (hora ?? '').split(':').map(Number);
+    return new Date(y, m - 1, d, hh, mm).getTime();
+  }
+
+  private normalizarPlaca(v: string): string {
+    return v.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  }
 
   formatarPlacaInput(valor: string): void {
     const limpa = this.normalizarPlaca(valor);
-
-    if (limpa.length <= 3) {
-      this.buscaPlaca.set(limpa);
-      return;
-    }
-
-    const formatada = `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}`;
-    this.buscaPlaca.set(formatada);
+    this.buscaPlaca.set(
+      limpa.length > 3 ? `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}` : limpa
+    );
   }
 
-  /* =======================
-     Navigation
-  ======================= */
   voltar(): void {
     this.router.navigate(['/']);
   }
