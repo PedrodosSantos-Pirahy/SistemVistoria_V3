@@ -3,12 +3,6 @@
   <!-- HEADER -->
   <div class="flex items-center justify-between">
     <h2 class="text-xl font-semibold">Histórico de Vistorias</h2>
-
-    <button
-      class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300"
-      (click)="voltar()">
-      Voltar
-    </button>
   </div>
 
   <!-- FILTROS -->
@@ -19,7 +13,7 @@
       type="text"
       placeholder="Placa (AAA-1234)"
       class="border rounded p-2"
-      [value]="buscaPlaca()"
+      maxlength="8" [value]="buscaPlaca()"
       (input)="formatarPlacaInput($any($event.target).value)" />
 
     <!-- BUSCA TRANSPORTADORA -->

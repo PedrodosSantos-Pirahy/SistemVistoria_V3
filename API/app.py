@@ -295,23 +295,36 @@ def get_agend_v2_columns(filter_date=None, force_refresh=False):
             pre_ordem = row[4] if len(row) > 4 else ""
             transportadora = row[5] if len(row) > 5 else ""
             status = row[10] if len(row) > 10 else ""
+            pirahy = row[23] if len(row) > 23 else ""
             id_vistoria = row[24] if len(row) > 24 else ""
             placa = row[25] if len(row) > 25 else ""
 
-            status_normalizado = status.strip().lower()
-            if not date_value:
-                continue 
+            hoje = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            
+            try:
+                # Converte a data da string (ajuste o formato '%d/%m/%Y' se sua planilha usar outro)
+                data_objeto = datetime.strptime(date_value, '%d/%m/%Y')
+            except ValueError:
+                continue
 
+            status_normalizado = status.strip().lower()
             categoria_data = classificar_data(date_value)
 
-            if (status_normalizado not in ("concluida", "cancelada")
-                and categoria_data != "indefinida"):
+            # NOVA REGRA: 
+            # 1. Data deve ser hoje ou futura (data_objeto >= hoje)
+            # 2. Status não pode ser concluído ou cancelado
+            # 3. Categoria não pode ser indefinida
+            if (data_objeto >= hoje and 
+                status_normalizado not in ("concluida", "cancelada") and 
+                categoria_data != "indefinida"):
+                
                 selected_data.append({
                     "data": date_value,
                     "categoria_data": categoria_data,
                     "hora": hora,
                     "placa": placa,
                     "status": status,
+                    "local": pirahy,
                     "id": id_vistoria,
                     "pre_ordem": pre_ordem,
                     "transportadora": transportadora
@@ -321,7 +334,10 @@ def get_agend_v2_columns(filter_date=None, force_refresh=False):
 
 # ... dentro de get_agend_v2_columns ...
 
-        selected_data.sort(key=lambda x: x.get("hora", ""))
+        selected_data.sort(key=lambda x: (
+            datetime.strptime(x.get("data", "01/01/2000"), '%d/%m/%Y'), 
+            x.get("hora", "")
+        ))
 
         if filter_date is None:
             CACHE_PENDENCIAS["data"] = selected_data

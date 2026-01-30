@@ -14,6 +14,7 @@ interface Inspection {
   id: string;
   categoria_data: string;
   data?: string;
+  local?: string;
 }
 
 
@@ -139,26 +140,28 @@ export class PainelComponent implements OnInit {
        * Converte os objetos da API
        * mantendo placa + status
        */
-      const parsedInspections: Inspection[] = pendentes
+      // Dentro do seu .map no fetchInspections:
+const parsedInspections: Inspection[] = pendentes
+  .map((item: any) => {
+    if (!item?.placa || !item?.status || !item?.id) {
+      console.warn('Item inválido ignorado:', item);
+      return null;
+    }
 
-        .map((item: any) => {
-          if (!item?.placa || !item?.status || !item?.id) {
-            console.warn('Item inválido ignorado:', item);
-            return null;
-          }
-
-          return {
-            placa: item.placa,
-            status: item.status,
-            id: item.id,
-            data: item.data,
-            pre_ordem: item.pre_ordem,
-            transportadora: item.transportadora,
-            categoria_data: item.categoria_data?.trim()
-          };
-        })
-        .filter(item => item !== null) as Inspection[];
-
+    return {
+      placa: item.placa,
+      status: item.status,
+      id: item.id,
+      data: item.data,
+      pre_ordem: item.pre_ordem,
+      transportadora: item.transportadora,
+      categoria_data: item.categoria_data?.trim(),
+      // ⬇️ ADICIONE ESTA LINHA ABAIXO ⬇️
+      // Certifique-se que 'item.local' é o nome que vem do seu Python
+      local: item.local || 'Filial' // Exemplo: se vier vazio, assume Matriz
+    };
+  })
+  .filter(item => item !== null) as Inspection[];
 
 
       // Atualiza o estado do painel
@@ -189,33 +192,26 @@ export class PainelComponent implements OnInit {
     window.location.reload();
   }
 
-  tipoFiltro = signal<
-    'Data Atual' | 'Datas Anteriores' | 'Datas Futuras' | 'Todas as Datas'>('Data Atual');
+ // 1. Definição dos Estados (Sinais)
+readonly tipoFiltro = signal<'Data Atual' | 'Datas Futuras' | 'Todas as Datas'>('Data Atual');
+readonly tipoLocal = signal<'Filial' | 'Matriz' | 'Qualquer'>('Qualquer');
 
+// 2. A Mágica do Filtro (Calculado automaticamente)
+readonly vistoriasFiltradas = computed(() => {
+  const lista = this.inspections();
+  const dataRef = this.tipoFiltro();
+  const localRef = this.tipoLocal();
 
-  get vistoriasFiltradas(): Inspection[] {
-    const lista = this.inspections();
-    const filtro = this.tipoFiltro();
+  return lista.filter(v => {
+    // Filtra por data (se for 'Tudo', ignora)
+    const matchData = dataRef === 'Todas as Datas' || v.categoria_data === dataRef;
+    
+    // Filtra por local (se for 'Qualquer', ignora)
+    const matchLocal = localRef === 'Qualquer' || v.local === localRef;
 
-    if (filtro === 'Todas as Datas') {
-      return lista;
-    }
-
-    return lista.filter(v => v.categoria_data === filtro);
-  }
-
-
-
-  tituloFiltro = computed(() => {
-    switch (this.tipoFiltro()) {
-      case 'Data Atual': return 'Hoje';
-      case 'Datas Anteriores': return 'Datas Anteriores';
-      case 'Datas Futuras': return 'Datas Futuras';
-      default: return '';
-    }
+    return matchData && matchLocal;
   });
-
-
+});
 
   private pollingInterval!: number;
 
