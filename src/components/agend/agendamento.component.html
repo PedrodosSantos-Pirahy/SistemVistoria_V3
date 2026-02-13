@@ -1,0 +1,207 @@
+<div class="min-h-screen bg-[#f8f6f2] flex items-stretch overflow-hidden font-sans">
+  
+  <aside class="w-[340px] bg-white border-r border-[#eadfce] p-6 flex flex-col shadow-xl z-10 overflow-y-auto">
+    <div class="mb-5">
+      <h1 class="text-lg font-black text-[#6b2b1f] tracking-tighter flex items-center gap-2 uppercase">
+        <span class="w-1.5 h-5 bg-[#6b2b1f] rounded-full"></span>
+        Agendamento
+      </h1>
+      <p class="text-[8px] text-gray-400 font-bold uppercase tracking-[0.1em] mt-0.5">Vistoria Pirahy</p>
+    </div>
+
+    <div class="space-y-5 flex-grow">
+      
+      <section>
+        <label class="text-[8px] font-black text-gray-400 uppercase mb-2 block ml-1">Unidade de Atendimento</label>
+        <div class="flex p-1 bg-gray-100 rounded-lg">
+          @for (loc of ['Matriz', 'Filial']; track loc) {
+            <button (click)="selectedLocal.set(loc)"
+              [class]="selectedLocal() === loc ? 'bg-white text-[#6b2b1f] shadow-sm ring-1 ring-[#6b2b1f]/10' : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'"
+              class="flex-1 py-2 rounded-md font-bold text-[10px] transition-all uppercase">
+              {{ loc }}
+            </button>
+          }
+        </div>
+      </section>
+
+      <section>
+        <label class="text-[8px] font-black text-gray-400 uppercase mb-1.5 block text-center">Veículo (Placa)</label>
+        <input type="text" [value]="placa()" (input)="formatarPlaca($any($event.target).value)"
+            placeholder="AAA-0000" maxlength="8"
+            class="w-full bg-[#fdfbf9] border border-[#eadfce] rounded-xl p-3 text-xl font-black text-[#6b2b1f] text-center tracking-widest focus:border-[#6b2b1f] focus:outline-none transition-all placeholder:text-gray-200"
+            [class.border-red-500]="placaError()"> <div class="mt-2 min-h-[24px]">
+            @if (isSearchingPlaca()) {
+               <p class="text-[9px] text-[#6b2b1f] text-center flex justify-center items-center gap-1">
+                 <svg class="animate-spin h-3 w-3" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                 Buscando cadastro...
+               </p>
+            } 
+            @else if (transportadora()) {
+              <div class="flex items-center gap-1.5 px-3 py-1.5 bg-[#e6f4ea] border border-green-200 rounded-lg animate-fade-in">
+                  <span class="text-[9px] font-black text-green-700 uppercase shrink-0">✔</span>
+                  <span class="text-[10px] font-bold text-green-800 truncate block max-w-[180px]">
+                  {{ transportadora() }}
+                  </span>
+              </div>
+            } 
+            @else if (placaError()) {
+              <div class="bg-red-50 border border-red-200 rounded-lg p-2 text-center animate-fade-in">
+                <p class="text-[9px] font-bold text-red-600 uppercase">{{ placaError() }}</p>
+              </div>
+            }
+        </div>
+      </section>
+
+      <section>
+        <label class="text-[8px] font-black text-gray-400 uppercase mb-1.5 block ml-1">Duração Estimada</label>
+        <div class="relative">
+          <select [ngModel]="duracao()" (ngModelChange)="duracao.set($event)"
+            class="w-full bg-white border border-[#eadfce] rounded-lg p-2.5 font-bold text-xs text-[#6b2b1f] focus:border-[#6b2b1f] outline-none cursor-pointer appearance-none shadow-sm">
+            <option [value]="15">15 minutos (Rápida)</option>
+            <option [value]="30">30 minutos (Padrão)</option>
+            <option [value]="45">45 minutos (Longa)</option>
+            <option [value]="60">60 minutos (Completa)</option>
+          </select>
+          <div class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-[#6b2b1f]">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="flex justify-between items-end mb-2">
+          <label class="text-[8px] font-black text-gray-400 uppercase ml-1">
+            Ordens de Carregamento <span class="text-red-500">*</span>
+          </label>
+          <button (click)="addPreOrdem()" 
+                  [disabled]="preordens().length >= 5"
+                  [class.opacity-50]="preordens().length >= 5"
+                  [class.cursor-not-allowed]="preordens().length >= 5"
+                  class="text-[9px] bg-[#6b2b1f]/10 text-[#6b2b1f] hover:bg-[#6b2b1f] hover:text-white px-3 py-1 rounded-md transition-all font-bold flex items-center gap-1 shadow-sm"
+                  title="Adicionar nova ordem">
+            + Nova Ordem
+          </button>
+        </div>
+
+        <div class="space-y-2 max-h-[150px] overflow-y-auto pr-1 custom-scrollbar">
+          @for (ordem of preordens(); track $index) {
+            <div class="relative group animate-fade-in-down flex items-center">
+              <span class="absolute left-3 text-[10px] font-bold text-gray-300">#{{ $index + 1 }}</span>
+              <input type="text" 
+                [value]="ordem" 
+                (input)="updatePreOrdem($index, $event)"
+                placeholder="123456" 
+                class="w-full bg-white border border-[#eadfce] rounded-lg py-2.5 pl-10 pr-8 font-bold text-xs text-[#6b2b1f] focus:border-[#6b2b1f] outline-none tracking-widest placeholder:text-gray-200 shadow-sm focus:shadow-md transition-all">
+              
+              @if (preordens().length > 1) {
+                <button (click)="removePreOrdem($index)" 
+                        class="absolute right-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full w-5 h-5 flex items-center justify-center text-sm transition-all"
+                        title="Remover">
+                  ×
+                </button>
+              }
+            </div>
+          }
+        </div>
+      </section>
+
+      <div class="bg-[#f6efe8]/50 border border-dashed border-[#eadfce] p-4 rounded-xl mt-2">
+        <div class="flex justify-between items-start mb-2.5">
+          <span class="text-[8px] font-black text-[#5a3a30] uppercase opacity-70">Resumo</span>
+          <span class="text-[7px] px-1.5 py-0.5 bg-[#6b2b1f] text-white rounded font-bold uppercase">{{ duracao() }} MIN</span>
+        </div>
+        <div class="space-y-1.5">
+          <div class="flex justify-between items-baseline">
+            <span class="text-[9px] text-gray-500 uppercase font-bold">Início:</span>
+            <span class="font-black text-[#6b2b1f] text-base tracking-tighter">{{ horaSelecionada() || '--:--' }}</span>
+          </div>
+          <div class="flex justify-between items-baseline border-t border-[#eadfce]/30 pt-1.5">
+            <span class="text-[9px] text-gray-500 uppercase font-bold">Fim previsto:</span>
+            <span class="font-black text-[#6b2b1f] text-base tracking-tighter">{{ terminoPrevisto() }}</span>
+          </div>
+          <div class="flex justify-between items-baseline border-t border-[#eadfce]/30 pt-1.5">
+            <span class="text-[9px] text-gray-500 uppercase font-bold">Qtd. Ordens:</span>
+            <span class="font-bold text-[#6b2b1f] text-xs">{{ preordens().length }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button 
+      (click)="confirmarAgendamento()"
+      [disabled]="!isFormValid() || isSubmitting()"
+      class="w-full py-3 bg-[#6b2b1f] text-white rounded-lg font-black text-xs shadow-lg 
+             hover:brightness-110 active:scale-95 disabled:bg-gray-300 disabled:text-gray-500 disabled:shadow-none disabled:cursor-not-allowed
+             transition-all mt-4 uppercase tracking-wider flex justify-center items-center gap-2">
+      
+      @if (isSubmitting()) {
+        <svg class="animate-spin h-4 w-4 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span>Enviando...</span>
+      } @else {
+        
+        @if (!selectedLocal()) {
+          Selecione a Unidade (Matriz/Filial)
+        } @else if (!transportadora()) {
+          Preencha a Placa
+        } @else if (!horaSelecionada()) {
+          Selecione um Horário
+        } @else if (preordens()[0] === '') {
+          Digite a Ordem
+        } @else {
+          Confirmar Vistoria
+        }
+
+      }
+    </button>
+  </aside>
+
+  <main class="flex-grow p-10 overflow-y-auto">
+    <div class="max-w-5xl mx-auto">
+      <header class="flex justify-between items-center mb-10 border-b border-[#eadfce] pb-5">
+        <div>
+          <h2 class="text-2xl font-black text-[#4a342d] tracking-tighter uppercase">Horários do dia</h2>
+          <p class="text-gray-400 font-medium mt-0.5 text-xs">Selecione um slot disponível para o agendamento.</p>
+        </div>
+        <div class="bg-white shadow-sm rounded-lg p-2 flex items-center gap-3 border border-[#eadfce]">
+          <span class="text-[8px] font-black text-gray-400 uppercase ml-1">Data:</span>
+          
+          <input type="date" 
+                [ngModel]="selectedDate()" 
+                (ngModelChange)="selectedDate.set($event)"
+                [min]="minDate"  
+                class="border-none font-black text-[#6b2b1f] text-sm focus:ring-0 cursor-pointer bg-transparent py-0">
+        </div>
+      </header>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+        @for (slot of slots(); track slot.time) {
+          <button (click)="horaSelecionada.set(slot.time)"
+            [disabled]="slot.load >= 3 || slot.isPast"
+            class="group relative p-4 rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-2"
+            [ngClass]="{
+              'bg-white border-[#eadfce] hover:border-[#6b2b1f] hover:shadow-md hover:-translate-y-0.5': slot.load < 3 && !slot.isPast && horaSelecionada() !== slot.time,
+              'bg-gray-100 border-transparent opacity-30 cursor-not-allowed': slot.load >= 3 || slot.isPast,
+              'bg-[#6b2b1f] border-[#6b2b1f] text-white shadow-md scale-105 z-10 ring-2 ring-[#6b2b1f]/20': horaSelecionada() === slot.time
+            }">
+            
+            <span class="text-base font-black tracking-tighter">{{ slot.time }}</span>
+            
+            <div class="flex gap-1">
+              @for (v of [1,2,3]; track v) {
+                <div [class]="v <= slot.load ? 'bg-red-400' : (horaSelecionada() === slot.time ? 'bg-white/40' : 'bg-green-400')"
+                  class="w-1.5 h-1.5 rounded-full shadow-xs"></div>
+              }
+            </div>
+
+            <span class="text-[7px] font-black uppercase tracking-tight opacity-60">
+              {{ slot.load >= 3 ? 'Lotado' : (3 - slot.load) + ' Livres' }}
+            </span>
+          </button>
+        }
+      </div>
+    </div>
+  </main>
+</div>

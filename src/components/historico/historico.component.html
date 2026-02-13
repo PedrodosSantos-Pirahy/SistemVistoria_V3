@@ -1,125 +1,167 @@
-<div class="p-4 space-y-4">
+<div class="p-4 space-y-6 font-sans text-[#4a342d] max-w-5xl mx-auto">
 
-  <!-- HEADER -->
-  <div class="flex items-center justify-between">
-    <h2 class="text-xl font-semibold">Histórico de Vistorias</h2>
-  </div>
-
-  <!-- FILTROS -->
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-
-    <!-- BUSCA PLACA -->
-    <input
-      type="text"
-      placeholder="Placa (AAA-1234)"
-      class="border rounded p-2"
-      maxlength="8" [value]="buscaPlaca()"
-      (input)="formatarPlacaInput($any($event.target).value)" />
-
-    <!-- BUSCA TRANSPORTADORA -->
-    <input
-      type="text"
-      placeholder="Transportadora"
-      class="border rounded p-2"
-      [value]="buscaTransp()"
-      (input)="buscaTransp.set($any($event.target).value)" />
-
-    <!-- ORDEM -->
-    <select
-      class="border rounded p-2"
-      [value]="ordemSelecionada()"
-      (change)="ordemSelecionada.set($any($event.target).value)">
-      <option value="desc">Mais recentes</option>
-      <option value="asc">Mais antigos</option>
-    </select>
-
-  </div>
-
-  <!-- CONTADORES -->
-  <div class="flex gap-4 text-sm">
-    <span class="text-green-600">
-      Concluídas: {{ totalConcluidas() }}
-    </span>
-    <span class="text-red-600">
-      Canceladas: {{ totalCanceladas() }}
-    </span>
-  </div>
-
-  <!-- LOADING / ERRO -->
-  <div *ngIf="carregando()" class="text-gray-500">
-    Carregando histórico...
-  </div>
-
-  <div *ngIf="erro()" class="text-red-600">
-    {{ erro() }}
-  </div>
-
-  <!-- LISTA -->
-<div class="space-y-2" *ngIf="!carregando()">
-
-  <div
-    *ngFor="let h of historicoFiltrado()"
-    class="border rounded-lg p-4 flex justify-between items-center
-           cursor-pointer select-none
-           hover:bg-indigo-50 hover:border-indigo-400
-           transition"
-    [class.opacity-60]="!h.pdf"
-    (click)="h.pdf && abrirPdf(h.pdf)">
-
-    <!-- INFO -->
+  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
-      <div class="font-semibold text-lg">{{ h.placa }}</div>
-
-      <div class="text-sm text-gray-600">
-        {{ h.data }} • {{ h.hora }}
-      </div>
-
-      <div class="text-sm text-gray-600">
-        {{ h.transportadora }}
-      </div>
-
-      <div
-        class="text-sm font-medium mt-1"
-        [class.text-green-600]="h.status === 'Concluida'"
-        [class.text-red-600]="h.status === 'Cancelada'">
-        {{ h.status }}
-      </div>
+      <h2 class="text-2xl font-black uppercase tracking-tight text-[#6b2b1f]">Histórico</h2>
+      <p class="text-xs font-bold text-gray-400 uppercase">Consultas e Downloads</p>
     </div>
 
-    <!-- INDICADOR PDF -->
-    <div
-      class="px-3 py-2 rounded text-white text-sm font-semibold"
-      [class.bg-indigo-600]="h.pdf"
-      [class.bg-gray-400]="!h.pdf">
-      📄 PDF
+    <div class="text-xs font-bold text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200">
+        Total: {{ totalItens() }} registros
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-2xl shadow-sm border border-[#eadfce]">
+    
+    <div>
+        <label class="text-[10px] font-bold uppercase text-gray-400 pl-1">Buscar Placa</label>
+        <div class="flex gap-2">
+            <input
+            type="text"
+            placeholder="AAA-1234"
+            class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-lg font-black uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] transition-all placeholder:text-gray-300"
+            maxlength="8" 
+            [value]="buscaPlaca()"
+            (input)="formatarPlacaInput($any($event.target).value)" 
+            (keyup.enter)="aoPesquisar()" />
+        </div>
     </div>
 
+    <div>
+        <label class="text-[10px] font-bold uppercase text-gray-400 pl-1">Buscar Transportadora</label>
+        <div class="flex gap-2">
+            <input
+            type="text"
+            placeholder="Nome da Transportadora..."
+            class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-bold uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] transition-all placeholder:text-gray-300 h-[54px]"
+            [value]="buscaTransp()"
+            (input)="buscaTransp.set($any($event.target).value)"
+            (keyup.enter)="aoPesquisar()" />
+            
+            <button (click)="aoPesquisar()" class="bg-[#6b2b1f] text-white px-4 rounded-xl font-bold uppercase text-sm shadow-md hover:bg-[#5a241a] transition-colors">
+                🔍
+            </button>
+        </div>
+    </div>
+  </div>
+
+  <div *ngIf="carregando()" class="py-12 text-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-4 border-[#6b2b1f] mx-auto mb-3"></div>
+    <p class="text-gray-400 font-bold text-xs uppercase tracking-widest">Buscando...</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4" *ngIf="!carregando()">
+
+  <div *ngFor="let h of historico()"
+       class="bg-white rounded-2xl p-5 border border-[#eadfce] shadow-sm hover:shadow-md transition-all group relative overflow-hidden">
+    
+    <div class="absolute left-0 top-0 bottom-0 w-1.5"
+         [ngClass]="h.status === 'Concluida' ? 'bg-green-500' : 'bg-red-500'">
+    </div>
+
+    <div class="flex justify-between items-start mb-3 pl-2">
+        <div>
+            <h3 class="text-2xl font-black text-[#6b2b1f] tracking-tight">{{ h.placa }}</h3>
+            <div class="flex items-center gap-2 text-xs font-bold text-gray-400 mt-0.5">
+                <span>🗓 {{ h.data }}</span>
+                <span>⏰ {{ h.hora }}</span>
+            </div>
+        </div>
+
+        <span class="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide border"
+              [ngClass]="h.status === 'Concluida' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-red-50 text-red-700 border-red-200'">
+            {{ h.status }}
+        </span>
+    </div>
+
+    <div class="space-y-2 pl-2 mb-5">
+        <div>
+            <p class="text-[9px] font-bold text-gray-400 uppercase">Transportadora</p>
+            <p class="text-sm font-bold text-gray-700 truncate">{{ h.transportadora }}</p>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-2">
+            <div>
+                <p class="text-[9px] font-bold text-gray-400 uppercase">Vistoriador</p>
+                <p class="text-xs font-bold text-gray-600 truncate">{{ h.vistoriador }}</p>
+            </div>
+            
+            <div>
+                <ng-container *ngIf="h.status === 'Cancelada'; else blocoLiberado">
+                    <p class="text-[9px] font-bold text-red-400 uppercase">Motivo Cancelamento</p>
+                    <p class="text-xs font-bold text-red-600 truncate" title="{{ h.observacoes }}">
+                        {{ h.observacoes || 'Motivo não informado' }}
+                    </p>
+                </ng-container>
+
+                <ng-template #blocoLiberado>
+                    <p class="text-[9px] font-bold text-gray-400 uppercase">Liberado?</p>
+                    <p class="text-xs font-bold" 
+                       [ngClass]="h.liberacao === 'Sim' ? 'text-green-600' : 'text-red-600'">
+                       {{ h.liberacao }}
+                    </p>
+                </ng-template>
+            </div>
+        </div>
+    </div>
+
+    <div class="pl-2">
+        <button 
+            (click)="h.pdf && abrirPdf(h.pdf)"
+            [disabled]="!h.pdf"
+            class="w-full py-3 rounded-xl flex items-center justify-center gap-2 font-bold text-sm uppercase transition-all active:scale-95"
+            [ngClass]="h.pdf ? 'bg-[#6b2b1f] text-white shadow-md shadow-[#6b2b1f]/20 hover:bg-[#85392b]' : 'bg-gray-100 text-gray-400 cursor-not-allowed'">
+            
+            <span *ngIf="h.pdf">📄 Visualizar PDF</span>
+            <span *ngIf="!h.pdf">🚫 Sem PDF</span>
+        </button>
+    </div>
+
+  </div>
+
+  <div *ngIf="historico().length === 0" class="col-span-full py-12 text-center">
+      <div class="text-4xl mb-2">🔍</div>
+      <p class="text-gray-400 font-bold text-sm uppercase">Nenhuma vistoria encontrada.</p>
   </div>
 
 </div>
 
+<div class="bg-white border border-[#eadfce] rounded-xl p-3 flex justify-between items-center shadow-sm sticky bottom-4 z-10" *ngIf="totalPaginas() > 1">
+        
+    <span class="text-xs text-gray-500 font-bold hidden sm:block">
+      Página {{ paginaAtual() }} de {{ totalPaginas() }}
+    </span>
 
-<!-- MODAL PDF -->
-<div
-  *ngIf="modalAberto()"
-  class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div class="flex items-center justify-between w-full sm:w-auto gap-4">
+        <button (click)="mudarPagina(paginaAtual() - 1)" 
+                [disabled]="paginaAtual() === 1"
+                class="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-gray-100 text-xs font-bold uppercase text-gray-600 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed">
+            ⬅ Anterior
+        </button>
+        
+        <span class="text-xs font-bold text-[#6b2b1f] sm:hidden">
+            {{ paginaAtual() }} / {{ totalPaginas() }}
+        </span>
 
-  <div class="bg-white w-[95%] h-[95%] rounded-lg relative overflow-hidden">
+        <button (click)="mudarPagina(paginaAtual() + 1)" 
+                [disabled]="paginaAtual() === totalPaginas()"
+                class="flex-1 sm:flex-none px-4 py-2 rounded-lg bg-[#6b2b1f] text-white text-xs font-bold uppercase hover:bg-[#5a241a] disabled:opacity-50 disabled:cursor-not-allowed">
+            Próximo ➡
+        </button>
+    </div>
+</div>
 
-    <!-- FECHAR -->
-    <button
-      class="absolute top-3 right-3 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center"
-      (click)="fecharModal()">
-      ✕
-    </button>
 
-    <!-- PDF -->
-    <iframe
-      *ngIf="pdfSelecionado()"
-      [src]="pdfSelecionado()"
-      class="w-full h-full"
-      frameborder="0">
-    </iframe>
+<div *ngIf="modalAberto()" class="fixed inset-0 bg-black/90 z-[9999] flex flex-col animate-fade-in">
+    <div class="bg-[#1a1a1a] text-white p-4 flex justify-between items-center shrink-0">
+        <h3 class="font-bold text-sm uppercase tracking-widest text-gray-400">Visualizar PDF</h3>
+        <button (click)="fecharModal()" class="bg-white/10 p-2 rounded-full hover:bg-white/20 transition">
+            ✕
+        </button>
+    </div>
+    <div class="flex-grow bg-[#2a2a2a] relative">
+        <iframe *ngIf="pdfSelecionado()" [src]="pdfSelecionado()" class="w-full h-full absolute inset-0" frameborder="0"></iframe>
+    </div>
+</div> 
 
-  </div>
 </div>

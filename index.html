@@ -2,49 +2,23 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <link rel="shortcut icon" href="src/a.ico" type="image/x-icon">
-  <link rel="icon" href="src/images/a.ico" type="image/x-icon">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vistorias - Pirahy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#6b2b1f">
 
+  <link rel="icon" type="image/x-icon" href="favicon.ico">
+
+  <link rel="manifest" href="manifest.webmanifest">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+  
   <style>
-    /* Custom scrollbar for a cleaner look on desktop */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #f1f1f1;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #888;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #555;
-    }
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
   </style>
-<script type="importmap">
-{
-  "imports": {
-    "rxjs": "https://aistudiocdn.com/rxjs@^7.8.2?conditions=es2015",
-    "rxjs/operators": "https://aistudiocdn.com/rxjs@^7.8.2/operators?conditions=es2015",
-    "rxjs/ajax": "https://aistudiocdn.com/rxjs@^7.8.2/ajax?conditions=es2015",
-    "rxjs/webSocket": "https://aistudiocdn.com/rxjs@^7.8.2/webSocket?conditions=es2015",
-    "rxjs/testing": "https://aistudiocdn.com/rxjs@^7.8.2/testing?conditions=es2015",
-    "rxjs/fetch": "https://aistudiocdn.com/rxjs@^7.8.2/fetch?conditions=es2015",
-    "@angular/compiler": "https://next.esm.sh/@angular/compiler@^21.0.2?external=rxjs",
-    "@angular/platform-browser": "https://next.esm.sh/@angular/platform-browser@^21.0.2?external=rxjs",
-    "@angular/core": "https://next.esm.sh/@angular/core@^21.0.2?external=rxjs",
-    "@angular/forms": "https://next.esm.sh/@angular/forms@^21.0.2?external=rxjs",
-    "@angular/common": "https://next.esm.sh/@angular/common@^21.0.2?external=rxjs"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
-  <link rel="manifest" href="manifest.webmanifest">
 </head>
 <body class="bg-gray-100">
   <app-root></app-root>

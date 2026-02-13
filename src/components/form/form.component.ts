@@ -7,6 +7,8 @@ import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OfflineStorageService } from '../../storange/offline-storage.service';
+import { FormsModule } from '@angular/forms'; // Importante para ngModel
+
 
 declare var SignaturePad: any;
 
@@ -22,7 +24,8 @@ interface OrdemTransportadora {
 @Component({
   selector: 'app-form',
   templateUrl: './form.component.html',
-  imports: [ReactiveFormsModule, CommonModule],
+  standalone:true,
+  imports: [ReactiveFormsModule, CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FormComponent implements OnDestroy {
@@ -207,82 +210,73 @@ export class FormComponent implements OnDestroy {
     placaForm: string
   ): Promise<OrdemTransportadora | null> {
     try {
-      const response = await fetch('http://192.168.53.193:5000/pendencias');
+      // Adicione um timestamp para evitar cache
+      const t = new Date().getTime();
+      const response = await fetch(`http://192.168.53.193:5000/pendencias?t=${t}`);
 
-      if (!response.ok) {
-        console.error('Erro ao buscar pendências');
-        return null;
-      }
+      if (!response.ok) return null;
 
       const data = await response.json();
-      const pendentes = Array.isArray(data?.pendentes)
-        ? data.pendentes
-        : [];
+      const pendentes = data.pendentes || [];
 
       const placaNormalizada = placaForm.trim().toUpperCase();
 
       const encontrada = pendentes.find((p: any) => {
         if (!p?.placa) return false;
-
-        const placaApi = p.placa
-          .split('/')
-          .pop()
-          ?.trim()
-          .toUpperCase();
-
-        return placaApi === placaNormalizada;
+        // Pega só a placa, ignorando horário se tiver (ex: "10:00/AAA-1234")
+        const placaApi = p.placa.includes('/') ? p.placa.split('/')[1] : p.placa;
+        return placaApi?.trim().toUpperCase() === placaNormalizada;
       });
 
-      if (!encontrada) {
-        console.warn('❌ Pendência não encontrada:', placaNormalizada);
-        return null;
-      }
+      if (!encontrada) return null;
 
       return {
-        pre_ordem: encontrada.pre_ordem ?? '',
-        transportadora: encontrada.transportadora ?? ''
+        // O Python já manda todas as ordens concatenadas aqui
+        pre_ordem: encontrada.pre_ordem || '', 
+        // O Python já manda a transportadora do JOIN aqui
+        transportadora: encontrada.transportadora || '' 
       };
 
     } catch (e) {
-      console.error('Erro ao buscar ordem e transportadora:', e);
+      console.error('Erro ao buscar dados:', e);
       return null;
     }
   }
 
-  async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
+ async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
     try {
       const response = await fetch('http://192.168.53.193:5000/pendencias');
-
-      if (!response.ok) {
-        console.error('Erro ao buscar pendências');
-        return null;
-      }
+      if (!response.ok) return null;
 
       const data = await response.json();
       const pendentes = data?.pendentes ?? [];
-
-      // normaliza a placa do formulário
       const placaNormalizada = placaForm.trim().toUpperCase();
 
       const encontrada = pendentes.find((p: any) => {
         if (!p?.placa) return false;
-
-        // "10:00/JBQ-7H55" → "JBQ-7H55"
-        const placaApi = p.placa.split('/').pop()?.toUpperCase();
-
-        return placaApi === placaNormalizada;
+        const placaApi = p.placa.includes('/') ? p.placa.split('/')[1] : p.placa;
+        return placaApi?.trim().toUpperCase() === placaNormalizada;
       });
 
-      if (!encontrada) {
-        console.warn('❌ Nenhuma pendência encontrada para a placa:', placaNormalizada);
-        return null;
+      if (!encontrada) return null;
+
+      console.log('✅ Pendência encontrada (Com Local):', encontrada);
+
+      // 🔥 CORREÇÃO: SE TEM LOCAL NA PENDÊNCIA, USE ELE!
+      if (encontrada.local) {
+          // Normaliza: MATRIZ -> Matriz
+          const localFormatado = encontrada.local.charAt(0).toUpperCase() + encontrada.local.slice(1).toLowerCase();
+          
+          if (['Matriz', 'Filial'].includes(localFormatado)) {
+              console.log(`📍 Aplicando Local do Agendamento: ${localFormatado}`);
+              this.form.get('dadosIniciais.localVistoria')?.setValue(localFormatado);
+          }
       }
 
-      console.log('✅ Pendência encontrada:', encontrada);
       return encontrada.id ?? null;
 
     } catch (e) {
-      console.error('Erro ao buscar ID pela placa:', e);
+      console.error('Erro ao buscar ID:', e);
       return null;
     }
   }
@@ -305,11 +299,32 @@ export class FormComponent implements OnDestroy {
   constructor(
     private router: Router,
     private offlineStorage: OfflineStorageService) {
+    
+    const userJson = localStorage.getItem('user');
+    if (userJson) {
+      try {
+        const user = JSON.parse(userJson);
+        if (user && user.local) {
+          const localLimpo = user.local.toString().trim().toUpperCase();
+          let valorFinal = '';
+          if (localLimpo === 'MATRIZ') valorFinal = 'Matriz';
+          else if (localLimpo === 'FILIAL') valorFinal = 'Filial';
+          
+          if (valorFinal) {
+            this.form.get('dadosIniciais.localVistoria')?.setValue(valorFinal);
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao ler usuario local', e);
+      }
+    }
 
     effect(async () => {
       if (this.placaInicializada) return;
 
-      const placaRecebida = this.placa();
+
+      // Forçamos o tipo para evitar o erro falso do editor
+      const placaRecebida = (this.placa as any)();
       if (!placaRecebida) return;
 
       const placaFormatada = placaRecebida.includes('/')
@@ -333,10 +348,47 @@ export class FormComponent implements OnDestroy {
       this.form
         .get('fotosVistoria.placas.placa1')
         ?.setValue(placaFormatada);
+      try {
+          console.log(`🔍 Buscando dados de carga para placa: ${placaFormatada}`);
+          const resp = await fetch(`http://192.168.53.193:5000/dados-carga/${placaFormatada}`);
+          
+          if (resp.ok) {
+              const dados = await resp.json();
+              console.log('📦 Dados recebidos do Python:', dados); // OLHE ISSO NO CONSOLE DO NAVEGADOR (F12)
+              
+              if (dados.encontrado) {
+                  const controls = this.form.controls.dadosIniciais.controls;
+                  
+                  // Preenche TRANSPORTADORA
+                  if (dados.transportadora) {
+                      controls.transportadora.setValue(dados.transportadora);
+                      controls.transportadora.disable(); 
+                  }
+
+                  // Preenche PRODUTO
+                  if (dados.produto) {
+                      controls.produto.setValue(dados.produto);
+                      controls.produto.disable(); 
+                  } else {
+                      // Se vier vazio, forçamos um texto
+                      controls.produto.setValue("Produto não identificado no sistema");
+                      controls.produto.disable();
+                  }
+                  
+                  // Preenche ORDEM
+                  if (dados.pre_ordem) {
+                      controls.numeroOrdem.setValue(dados.pre_ordem);
+                      controls.numeroOrdem.disable(); 
+                  }
+              }
+          }
+      } catch (err) {
+          console.error("❌ Erro ao buscar dados da carga:", err);
+      }
 
       // 🔑 NOVO: resolve o ID usando a placa
       const idEncontrado = await this.buscarIdPorPlaca(placaFormatada);
-
+      
       if (!idEncontrado) {
         console.warn('⚠️ ID NÃO ENCONTRADO PARA A PLACA:', placaFormatada);
       } else {
@@ -920,25 +972,59 @@ export class FormComponent implements OnDestroy {
 
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
   }
-
+// Adicione este helper privado para rolar para o topo
+  private scrollToTop() {
+    // Rola a janela principal para o topo suavemente
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Se o formulário estiver dentro de um container com scroll (comum em layouts responsivos),
+    // tente rolar esse container também.
+    const mainContainer = document.querySelector('main'); 
+    if (mainContainer) {
+        mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }
 
   previousStep(): void {
     if (this.currentStep() > 1) {
       this.currentStep.update(s => s - 1);
+      this.scrollToTop();
     }
   }
 
-  nextStep(): void {
+nextStep(): void {
     if (this.isCurrentStepValid()) {
       if (this.currentStep() < this.totalSteps) {
         this.currentStep.update(s => s + 1);
+        this.scrollToTop(); // Sucesso: Vai para o topo da próxima etapa
       }
     } else {
       const currentStepInfo = this.steps[this.currentStep() - 1];
+      
+      // 1. Marca tudo como "tocado" para aparecer os erros em vermelho
       currentStepInfo.groups.forEach(groupName => {
         const currentGroup = this.form.get(groupName) as FormGroup;
         if (currentGroup) currentGroup.markAllAsTouched();
       });
+      
+      alert('Existem campos obrigatórios não preenchidos nesta etapa.');
+
+      // 2. 🔥 O PULO DO GATO: Rola para o primeiro erro encontrado
+      setTimeout(() => {
+        // Busca o primeiro elemento que tenha a classe de erro do Angular (.ng-invalid)
+        // Ignoramos o próprio <form> para não rolar para o topo sem querer
+        const primeiroErro = document.querySelector('.ng-invalid:not(form)');
+        
+        if (primeiroErro) {
+          primeiroErro.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'center' // Centraliza o campo na tela
+          });
+          
+          // Tenta dar foco (cursor) no campo, se for possível
+          (primeiroErro as HTMLElement).focus();
+        }
+      }, 100); // 100ms de atraso para o DOM atualizar
     }
   }
 
@@ -1025,6 +1111,8 @@ private async podeEnviarParaApi(): Promise<boolean> {
 
 // form.component.ts -> Substitua o método onSubmit por este ajustado
 
+// No arquivo form.component.ts
+
 async onSubmit() {
   this.form.markAllAsTouched();
 
@@ -1034,89 +1122,182 @@ async onSubmit() {
   }
 
   // 1. TRAVA IMEDIATA (Evita clique duplo)
-  this.isSubmitting.set(true); 
+  this.isSubmitting.set(true);
   this.submissionError.set(null);
 
   // 2. Validação de Conexão
   const conexaoOk = await this.podeEnviarParaApi();
   if (!conexaoOk) {
-    this.isSubmitting.set(false); // Destrava se falhar a internet
-    return; 
+    this.isSubmitting.set(false);
+    return;
   }
 
-  // 3. Preparação dos Dados (SILENCIOSA)
-  
-  // Muda o step sem avisar o valueChanges
-  // (Isso evita disparar o auto-save na hora do envio)
-  // Nota: currentStep é um signal, então ele não dispara valueChanges do form,
-  // mas se você tivesse logic de form dependente, seria aqui.
+  // 3. Preparação Visual
+  // Avança a barra de progresso para 100% visualmente
   this.currentStep.update(() => this.totalSteps);
-
   this.submittedData.set(null);
 
-  // 4. Formatação de Datas (SILENCIOSA)
-  // O uso de { emitEvent: false } é CRUCIAL aqui.
-  // Ele muda o valor mas NÃO dispara o valueChanges do ngOnInit.
-  const nowStr = this.formatarParaBanco(new Date());
-  
-  this.form.controls.dadosIniciais.controls.fim.setValue(nowStr, { emitEvent: false });
+  try {
+    // 4. Formatação de Datas
+    const nowStr = this.formatarParaBanco(new Date());
+    // Atualiza o fim sem disparar eventos de formulário
+    this.form.controls.dadosIniciais.controls.fim.setValue(nowStr, { emitEvent: false });
 
-  // Pega os dados crus
-  const rawValue = this.form.getRawValue();
+    // Pega os dados brutos do formulário
+    const rawValue = this.form.getRawValue();
 
-  // Cria Payload
-  const payload = {
-    id: this.vistoriaId(),
-    ...this.processFormValue(rawValue)
-  };
-
-  // Garante datas no payload
-  payload.dadosIniciais.fim = nowStr;
-
-  const chegadaOriginal = rawValue.dadosIniciais.chegada;
-  if (chegadaOriginal && !chegadaOriginal.includes('/')) {
-      payload.dadosIniciais.chegada = this.formatarParaBanco(new Date(chegadaOriginal));
-  }
-  
-  const vistoriaOriginal = rawValue.dadosIniciais.vistoria;
-  if (vistoriaOriginal && !vistoriaOriginal.includes('/')) {
-      payload.dadosIniciais.vistoria = this.formatarParaBanco(new Date(vistoriaOriginal));
-  }
-
-  // 5. Limpeza do Rascunho (CRÍTICO)
-  // Fazemos isso ANTES do fetch de background para garantir que não sobre nada.
-  const idParaRemover = this.vistoriaId();
-  if (idParaRemover) {
-      // Como isSubmitting está true, o auto-save está pausado.
-      // Podemos deletar com segurança.
-      await this.offlineStorage.removerDraft(idParaRemover);
-  }
-
-  // 6. Feedback e Saída
-  alert('Conexão validada! A vistoria será enviada em segundo plano.');
-  this.finished.emit();
-  this.router.navigate(['/painel']);
-  window.scrollTo(0, 0);
-
-  // 7. Envio Background
-  fetch('http://192.168.53.193:5000/vistoria', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  })
-  .then(async response => {
-    if (!response.ok) {
-      console.error('Erro silencioso (Background):', response.statusText);
-    } else {
-      console.log('✅ Sucesso (Background): Servidor recebeu.');
+    // Formata datas de chegada/inicio se necessário
+    let chegadaFmt = rawValue.dadosIniciais.chegada;
+    if (chegadaFmt && !chegadaFmt.includes('/')) {
+      chegadaFmt = this.formatarParaBanco(new Date(chegadaFmt));
     }
-  })
-  .catch(err => {
-    console.error('❌ Erro de rede (Background):', err);
-  })
-  .finally(() => {
-    // Só destrava depois de tudo (embora o usuário já tenha saído da tela)
+    
+    let vistoriaFmt = rawValue.dadosIniciais.vistoria;
+    if (vistoriaFmt && !vistoriaFmt.includes('/')) {
+      vistoriaFmt = this.formatarParaBanco(new Date(vistoriaFmt));
+    }
+
+    // 5. CRIAÇÃO DO FORMDATA (O Segredo do Upload)
+    const formData = new FormData();
+
+    // --- A. CAMPOS DE TEXTO BÁSICOS ---
+    formData.append('id', this.vistoriaId() || '');
+    formData.append('chegada', chegadaFmt);
+    formData.append('vistoria', vistoriaFmt);
+    formData.append('fim', nowStr);
+    formData.append('numeroOrdem', rawValue.dadosIniciais.numeroOrdem);
+    formData.append('transportadora', rawValue.dadosIniciais.transportadora);
+    formData.append('operacao', rawValue.dadosIniciais.operacao);
+    formData.append('produto', rawValue.dadosIniciais.produto);
+    formData.append('ultimosProdutos', rawValue.dadosIniciais.ultimosProdutos);
+    formData.append('tipoVeiculo', rawValue.dadosIniciais.tipoVeiculo);
+    formData.append('localVistoria', rawValue.dadosIniciais.localVistoria);
+    formData.append('motoristaNome', rawValue.finalizacao.motoristaNome);
+    formData.append('vistoriadorNome', rawValue.finalizacao.vistoriadorNome);
+    formData.append('caminhaoLiberado', rawValue.finalizacao.caminhaoLiberado);
+    formData.append('observacoes', rawValue.finalizacao.observacoes);
+
+
+const placas = rawValue.fotosVistoria?.placas;
+    
+    if (placas?.placa1) {
+        formData.append('placa1', placas.placa1);
+    }
+
+    if (placas?.placa2) {
+        formData.append('placa2', placas.placa2);
+    }
+    
+    if (placas?.placa3) {
+        formData.append('placa3', placas.placa3);
+    }
+    // --- B. CHECKLIST (Achata os objetos {status: '...', outro: '...'} para texto simples) ---
+    // Função auxiliar para pegar o valor correto (se for "Outro", pega o texto digitado)
+    const getResposta = (grupo: any) => {
+      return grupo.status === 'Outro' ? (grupo.outro || 'Outro (sem esp.)') : grupo.status;
+    };
+
+    // Inspeção Interna
+    formData.append('limpeza', getResposta(rawValue.inspecaoInterna.limpeza));
+    formData.append('danos', getResposta(rawValue.inspecaoInterna.danos));
+    formData.append('umidade', getResposta(rawValue.inspecaoInterna.umidade));
+    formData.append('residuos', getResposta(rawValue.inspecaoInterna.residuos));
+    formData.append('odores', getResposta(rawValue.inspecaoInterna.odores));
+    formData.append('bocasGraneleiras', getResposta(rawValue.inspecaoInterna.bocasGraneleiras));
+    formData.append('lonas', getResposta(rawValue.inspecaoInterna.lonas));
+    formData.append('chapasMdf', getResposta(rawValue.inspecaoInterna.chapasMdf));
+
+    // Proteção Carga
+    formData.append('lonasProtecao', getResposta(rawValue.protecaoCarga.lonasProtecao));
+    formData.append('equipamentos', getResposta(rawValue.protecaoCarga.equipamentos));
+    formData.append('tampasLaterais', getResposta(rawValue.protecaoCarga.tampasLaterais));
+
+    // Detalhes Específicos (Baú / Container)
+    if (rawValue.detalhesVeiculo?.caminhaoBau) {
+      formData.append('alturaPorta', getResposta(rawValue.detalhesVeiculo.caminhaoBau.alturaPorta));
+      formData.append('larguraPorta', getResposta(rawValue.detalhesVeiculo.caminhaoBau.larguraPorta));
+      formData.append('assoalhoLiso', getResposta(rawValue.detalhesVeiculo.caminhaoBau.assoalhoLiso));
+    }
+    if (rawValue.detalhesVeiculo?.container) {
+      formData.append('verificacaoPeso', getResposta(rawValue.detalhesVeiculo.container.verificacaoPeso));
+    }
+
+    // --- C. ARQUIVOS (Converte Base64 para Blob binário) ---
+    
+    // Função Helper Interna
+    const dataURItoBlob = (dataURI: string | null) => {
+      if (!dataURI || !dataURI.includes(',')) return null;
+      const byteString = atob(dataURI.split(',')[1]);
+      const mimeString = dataURI.split(',')[0].split(':')[1].split(';')[0];
+      const ab = new ArrayBuffer(byteString.length);
+      const ia = new Uint8Array(ab);
+      for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
+      return new Blob([ab], { type: mimeString });
+    };
+
+    // Fotos (JPG)
+    const fotoP1 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca1);
+    if (fotoP1) formData.append('fotoPlaca1', fotoP1, 'placa1.jpg');
+
+    const fotoP2 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca2);
+    if (fotoP2) formData.append('fotoPlaca2', fotoP2, 'placa2.jpg');
+
+    const fotoP3 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca3);
+    if (fotoP3) formData.append('fotoPlaca3', fotoP3, 'placa3.jpg');
+
+    const fotoInt1 = dataURItoBlob(rawValue.fotosVistoria.interiorCarroceria.fotoInterior1);
+    if (fotoInt1) formData.append('fotoInterior1', fotoInt1, 'interior1.jpg');
+
+    const fotoInt2 = dataURItoBlob(rawValue.fotosVistoria.interiorCarroceria.fotoInterior2);
+    if (fotoInt2) formData.append('fotoInterior2', fotoInt2, 'interior2.jpg');
+
+    // Assinaturas (PNG)
+    const assMot = dataURItoBlob(rawValue.finalizacao.motoristaAssinatura);
+    if (assMot) formData.append('assinaturaMotorista', assMot, 'motorista.png');
+
+    const assVis = dataURItoBlob(rawValue.finalizacao.vistoriadorAssinatura);
+    if (assVis) formData.append('assinaturaVistoriador', assVis, 'vistoriador.png');
+
+
+    // 6. Limpeza do Rascunho (Antes de enviar para evitar conflito)
+    const idParaRemover = this.vistoriaId();
+    if (idParaRemover) {
+      await this.offlineStorage.removerDraft(idParaRemover);
+    }
+
+    // 7. Envio para a API (Sem Header JSON, pois é Multipart)
+    console.log('📤 Enviando FormData para o servidor...');
+    
+    fetch('http://192.168.53.193:5000/vistoria', {
+      method: 'POST',
+      body: formData, // O navegador define o boundary automaticamente
+    })
+    .then(async response => {
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Servidor respondeu com erro: ${response.status} - ${errText}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('✅ Sucesso Total:', data);
+      alert('Vistoria enviada com sucesso!');
+      this.finished.emit(); // Avisa o componente pai se necessário
+      this.router.navigate(['/']); // Volta pro painel
+    })
+    .catch(err => {
+      console.error('❌ Erro no envio:', err);
+      alert(`Erro ao enviar vistoria: ${err.message}`);
+      this.submissionError.set(err.message);
+    })
+    .finally(() => {
+      this.isSubmitting.set(false);
+    });
+
+  } catch (error) {
+    console.error('Erro crítico na preparação do envio:', error);
+    alert('Ocorreu um erro interno ao preparar os dados.');
     this.isSubmitting.set(false);
-  });
+  }
 }
 }

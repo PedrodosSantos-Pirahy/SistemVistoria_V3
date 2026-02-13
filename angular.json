@@ -15,7 +15,20 @@
       "outputPath": "./dist",
       "tsConfig": "tsconfig.json",
       "browser": "index.tsx",
-      "assets": ["src/images"]
+      "assets": [
+                  "src/favicon.ico",
+                  "src/assets", 
+                  {
+                    "glob": "**/*",
+                    "input": "src/images",
+                    "output": "/images"
+                  },
+                  {
+                    "glob": "manifest.webmanifest",
+                    "input": "src",
+                    "output": "/"
+                  }
+                ]
     },
 
           "configurations": {

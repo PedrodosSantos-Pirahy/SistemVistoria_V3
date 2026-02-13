@@ -1,8 +1,7 @@
 import { Routes } from '@angular/router';
-import { PainelComponent } from './components/painel/painel.component';
 
 export const APP_ROUTES: Routes = [
-  { path: '', redirectTo: 'painel', pathMatch: 'full' },
-  { path: 'painel', component: PainelComponent },
-  { path: '**', redirectTo: 'painel' }
+  // Deixe vazio ou apenas com um redirecionamento de segurança
+  // Isso garante que a URL fique sempre limpa (ex: 192.168.x.x:4200/#/)
+  { path: '**', redirectTo: '' }
 ];

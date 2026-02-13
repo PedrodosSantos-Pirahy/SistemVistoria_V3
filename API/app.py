@@ -799,21 +799,21 @@ def cancelar_vistoria():
 
         linha = achar_ou_criar_linha_por_id(id_vistoria)
 
-        sheets_service.values().update(
+        sheets_service.values().update(         #ENVIA PARA STATUS
             spreadsheetId=SHEET_ID,
             range=f"{SHEET_TAB}!B{linha}",
             valueInputOption="RAW",
             body={"values": [["Cancelada"]]}
         ).execute()
 
-        sheets_service.values().update(
+        sheets_service.values().update(         #ENVIA PARA OBSERVAÇÔES
             spreadsheetId=SHEET_ID,
             range=f"{SHEET_TAB}!AP{linha}",
             valueInputOption="RAW",
             body={"values": [[motivo]]}
         ).execute()
 
-        sheets_service.values().update(
+        sheets_service.values().update(         #ENVIA PARA NOME DO VISTORIADOR
             spreadsheetId=SHEET_ID,
             range=f"{SHEET_TAB}!AE{linha}",
             valueInputOption="RAW",

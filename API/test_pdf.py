@@ -1,48 +1,13 @@
 import os
-import tempfile
-import uuid
 from datetime import datetime
 from weasyprint import HTML
 from jinja2 import Environment, FileSystemLoader
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
 
 # ---------------------------
-# CONFIG GOOGLE
+# CONFIGURAÇÃO DE DIRETÓRIOS
 # ---------------------------
-SERVICE_ACCOUNT_FILE = r"\API\service-account.json"
-DRIVE_FOLDER_ID = "0AKLd3H4beidVUk9PVA"
-
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-
-creds = Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-drive_service = build("drive", "v3", credentials=creds)
-
-# ---------------------------
-# FUNÇÃO DE UPLOAD PDF
-# ---------------------------
-def upload_file_to_drive(file_path: str, filename: str, mime: str = "application/pdf"):
-    media = MediaFileUpload(file_path, mimetype=mime, resumable=True)
-    metadata = {"name": filename}
-    if DRIVE_FOLDER_ID:
-        metadata["parents"] = [DRIVE_FOLDER_ID]
-    created = drive_service.files().create(
-        body=metadata,
-        media_body=media,
-        fields="id, webViewLink, webContentLink",
-        supportsAllDrives=True
-    ).execute()
-    file_id = created.get("id")
-    try:
-        drive_service.permissions().create(
-            fileId=file_id,
-            body={"role": "reader", "type": "anyone"},
-            supportsAllDrives=True
-        ).execute()
-    except:
-        pass
-    return created.get("webContentLink") or created.get("webViewLink") or f"https://drive.google.com/file/d/{file_id}/view"
+# Pega o diretório onde este script está localizado
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ---------------------------
 # CONTEXTO DE TESTE
@@ -55,11 +20,11 @@ context = {
     "ordem": "12345",
     "transportadora": "Transportadora XYZ",
     "operacao": "Carga",
-    "produto": "Cimento",
+    "produto": "KNORR CARNE DE PANELA 81 FD30 / KNORR GALINHA CAIPIRA 108 FD30 / P.FINO BRANCO 6X5 - 1260 FD30 / P.FINO INTEGRAL 10X1 - 10.00 FD30",
     "ultimos_produtos": "Areia, Pedra, Tijolo",
     "tipo_veiculo": "Baú",
     "status_final": "APROVADO",
-    "placas": ["ABC-1234", "DEF-5678", "GHI-9012"],
+    "placas": ["ABC-1234", "DEF-5678", ""],
     "limpeza": "Conforme",
     "danos": "Conforme",
     "umidade": "Não Conforme",
@@ -85,17 +50,28 @@ context = {
 # ---------------------------
 # GERAR PDF USANDO TEMPLATE vistoria_pdf.html
 # ---------------------------
-base_dir = os.path.dirname(os.path.abspath(__file__))
-env = Environment(loader=FileSystemLoader(base_dir))
-template = env.get_template("vistoria_pdf.html")
-html_rendered = template.render(context)
+try:
+    # Configura o Jinja2 para ler o template na mesma pasta do script
+    env = Environment(loader=FileSystemLoader(BASE_DIR))
+    
+    # Carrega o arquivo HTML (deve estar na mesma pasta)
+    template = env.get_template("vistoria_pdf.html")
+    
+    # Renderiza o HTML com os dados do contexto
+    html_rendered = template.render(context)
 
-pdf_path = os.path.join(tempfile.gettempdir(), f"vistoria_test_{uuid.uuid4().hex}.pdf")
-HTML(string=html_rendered, base_url=base_dir).write_pdf(pdf_path)
-print("PDF gerado em:", pdf_path)
+    # Define o nome e o caminho do arquivo de saída
+    nome_arquivo = f"vistoria_teste_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+    caminho_saida = os.path.join(BASE_DIR, nome_arquivo)
 
-# ---------------------------
-# UPLOAD DRIVE
-# ---------------------------
-link = upload_file_to_drive(pdf_path, f"vistoria_test_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf")
-print("Link Drive:", link)
+    # Gera o PDF
+    print("Gerando PDF...")
+    HTML(string=html_rendered, base_url=BASE_DIR).write_pdf(caminho_saida)
+
+    print("-" * 30)
+    print(f"✅ SUCESSO! PDF gerado em:")
+    print(f"📂 {caminho_saida}")
+    print("-" * 30)
+
+except Exception as e:
+    print(f"❌ Erro ao gerar o PDF: {e}")

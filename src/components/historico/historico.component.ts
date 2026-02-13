@@ -2,19 +2,14 @@ import {
   Component,
   ChangeDetectionStrategy,
   signal,
-  computed,
   OnInit,
   inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
-/* =======================
-   Interface
-======================= */
 interface Historico {
   id: string;
   placa: string;
@@ -25,12 +20,10 @@ interface Historico {
   status: 'Concluida' | 'Cancelada';
   liberacao: string;
   vistoriador: string;
-  pdf: string; // 👉 agora é SÓ O ID
+  pdf: string;
+  observacoes?: string;
 }
 
-/* =======================
-   Component
-======================= */
 @Component({
   selector: 'app-historico',
   standalone: true,
@@ -40,151 +33,115 @@ interface Historico {
 })
 export class HistoricoComponent implements OnInit {
 
-  private http = inject(HttpClient);
-  private router = inject(Router);
-  private sanitizer = inject(DomSanitizer);
+  private http: HttpClient = inject(HttpClient);
+  private sanitizer: DomSanitizer = inject(DomSanitizer);
 
-  /* =======================
-     State
-  ======================= */
+  // DADOS DA PÁGINA ATUAL
   historico = signal<Historico[]>([]);
+
+  // CONTROLE DE PAGINAÇÃO
+  paginaAtual = signal(1);
+  itensPorPagina = signal(10); // 10 itens por vez é ideal para mobile
+  totalItens = signal(0);
+  totalPaginas = signal(1);
+
+  // FILTROS (Vão para o Backend)
   buscaPlaca = signal('');
   buscaTransp = signal('');
-  ordemSelecionada = signal<'asc' | 'desc'>('desc');
-
+  
   carregando = signal(false);
   erro = signal<string | null>(null);
 
+  // MODAL PDF
   modalAberto = signal(false);
   pdfSelecionado = signal<SafeResourceUrl | null>(null);
 
-  /* =======================
-     Lifecycle
-  ======================= */
   ngOnInit(): void {
-    this.buscarHistorico();
+     this.buscarHistorico();
   }
 
-  /* =======================
-     HTTP
-  ======================= */
-  private buscarHistorico(): void {
-    this.carregando.set(true);
-    this.erro.set(null);
+  // BUSCA NO SERVIDOR (PAGINADA)
+  buscarHistorico(): void {
+     this.carregando.set(true);
+     this.erro.set(null);
 
-    this.http.get<any>('http://192.168.53.193:5002/historico')
-      .subscribe({
-        next: res => {
-          const dados: Historico[] = (res?.historico ?? [])
-            .map((h: any) => {
-              const status = (h.vr ?? '').toLowerCase().trim();
+     const page = this.paginaAtual();
+     const limit = this.itensPorPagina();
+     const placa = this.normalizar(this.buscaPlaca());
+     const transp = this.buscaTransp().toUpperCase();
 
-              if (!['concluida', 'concluído', 'cancelada', 'cancelado'].includes(status)) {
-                return null;
-              }
+     // Envia tudo para o Python processar
+     const url = `http://192.168.53.193:5002/historico?page=${page}&limit=${limit}&placa=${placa}&transportadora=${transp}`;
 
-              return {
-                id: `${h.Placa}-${h.Data}-${h['Hora Inicio']}`,
-                placa: (h.Placa ?? '').toUpperCase(),
-                data: h.Data ?? '',
-                hora: h['Hora Inicio'] ?? '',
-                pre_Ordem: h.po ?? '',
-                transportadora: h.Transportadora ?? '',
-                status: status.startsWith('conclu') ? 'Concluida' : 'Cancelada',
-                liberacao: h.cl ?? '',
-                vistoriador: h.Vistoriador ?? '',
-                pdf: h.PDF ?? '' // 👉 SÓ O ID
-              } as Historico;
-            })
-            .filter(Boolean) as Historico[];
-
-          this.historico.set(dados);
-          this.carregando.set(false);
-        },
-        error: () => {
-          this.erro.set('Erro ao carregar o histórico.');
-          this.carregando.set(false);
-        }
-      });
+     this.http.get<any>(url).subscribe({
+         next: res => {
+            // Mapeia os dados
+            const dados: Historico[] = (res.data || []).map((h: any) => ({
+                 id: h.id,
+                 placa: h.placa,
+                 data: h.data,
+                 hora: h.hora,
+                 pre_Ordem: h.po,
+                 transportadora: h.transportadora,
+                 status: h.status,
+                 liberacao: h.liberado,
+                 vistoriador: h.vistoriador,
+                 pdf: h.pdf,
+                 observacoes: h.observacoes
+            }));
+            
+            this.historico.set(dados);
+            
+            // Atualiza rodapé da paginação
+            if (res.meta) {
+                this.totalItens.set(res.meta.total_items);
+                this.totalPaginas.set(res.meta.total_pages);
+            }
+            
+            this.carregando.set(false);
+         },
+         error: () => {
+           this.erro.set('Erro ao carregar dados.');
+           this.carregando.set(false);
+         }
+       });
   }
 
-  /* =======================
-     Computed
-  ======================= */
-  historicoFiltrado = computed(() => {
-    const placaFiltro = this.normalizarPlaca(this.buscaPlaca());
-    const transpFiltro = this.buscaTransp().toUpperCase();
-
-    return [...this.historico()]
-      .filter(h =>
-        this.normalizarPlaca(h.placa).includes(placaFiltro) &&
-        h.transportadora.toUpperCase().includes(transpFiltro)
-      )
-      .sort((a, b) => {
-        const da = this.parseDataHora(a.data, a.hora);
-        const db = this.parseDataHora(b.data, b.hora);
-        return this.ordemSelecionada() === 'asc' ? da - db : db - da;
-      });
-  });
-
-  totalCanceladas = computed(() =>
-    this.historicoFiltrado().filter(h => h.status === 'Cancelada').length
-  );
-
-  totalConcluidas = computed(() =>
-    this.historicoFiltrado().filter(h => h.status === 'Concluida').length
-  );
-
-  /* =======================
-     PDF
-  ======================= */
-abrirPdf(valor: string): void {
-  if (!valor) return;
-
-  let fileId = valor.trim();
-
-  // 🧠 Se vier URL completa, extrai o ID
-  const match = fileId.match(/\/d\/([^/]+)/) || fileId.match(/id=([^&]+)/);
-  if (match) {
-    fileId = match[1];
+  // AÇÕES
+  aoPesquisar() {
+      this.paginaAtual.set(1); // Volta pra pag 1 ao filtrar
+      this.buscarHistorico();
   }
 
-  // 🔥 SEMPRE gera preview padrão
-  const previewUrl = `https://drive.google.com/file/d/${fileId}/preview`;
-
-  this.pdfSelecionado.set(
-    this.sanitizer.bypassSecurityTrustResourceUrl(previewUrl)
-  );
-  this.modalAberto.set(true);
-}
-
-
-  fecharModal(): void {
-    this.modalAberto.set(false);
-    this.pdfSelecionado.set(null);
+  mudarPagina(novaPagina: number) {
+    if (novaPagina >= 1 && novaPagina <= this.totalPaginas()) {
+      this.paginaAtual.set(novaPagina);
+      this.buscarHistorico();
+    }
   }
 
-  /* =======================
-     Helpers
-  ======================= */
-  private parseDataHora(data: string, hora: string): number {
-    const [d, m, y] = data.split('/').map(Number);
-    const [hh = 0, mm = 0] = (hora ?? '').split(':').map(Number);
-    return new Date(y, m - 1, d, hh, mm).getTime();
+  // PDF
+  abrirPdf(idVistoria: string): void {
+    if (!idVistoria) return;
+    const urlPdf = `http://192.168.53.193:5002/pdf/${idVistoria}`;
+    this.pdfSelecionado.set(this.sanitizer.bypassSecurityTrustResourceUrl(urlPdf));
+    this.modalAberto.set(true);
   }
 
-  private normalizarPlaca(v: string): string {
-    return v.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  fecharModal() {
+     this.modalAberto.set(false);
+     this.pdfSelecionado.set(null);
   }
 
+  // HELPER
+  private normalizar(v: string): string {
+     return v ? v.toUpperCase().replace(/[^A-Z0-9]/g, '') : '';
+  }
+  
   formatarPlacaInput(valor: string): void {
-    const limpa = this.normalizarPlaca(valor);
-    this.buscaPlaca.set(
-      limpa.length > 3 ? `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}` : limpa
-    );
-  }
-
-  voltar(): void {
-    this.router.navigate(['/']);
+     const limpa = this.normalizar(valor);
+     this.buscaPlaca.set(
+        limpa.length > 3 ? `${limpa.slice(0, 3)}-${limpa.slice(3, 7)}` : limpa
+     );
   }
 }

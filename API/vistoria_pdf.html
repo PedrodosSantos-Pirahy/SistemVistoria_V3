@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RQ-SGSA-10-06-001 – CHECK LIST DE INSPEÇÃO DE VEÍCULOS</title>
     <style>
-        /* --- Global Styles & Resets --- */
+        /* --- Reset Básico --- */
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -16,13 +16,11 @@
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background-color: #fff;
             color: #1a202c;
-            /* REDUCED FURTHER: Base font size decreased for maximum density */
-            font-size: 11px;
-            /* REDUCED FURTHER: Tighter line height */
-            line-height: 1.35;
+            font-size: 10px;
+            line-height: 1.3;
         }
 
-        /* --- Print Styles --- */
+        /* --- Configuração de Impressão --- */
         @media print {
             body {
                 -webkit-print-color-adjust: exact;
@@ -30,417 +28,462 @@
             }
             @page {
                 size: A4;
-                /* REDUCED FURTHER: Smaller page margins to maximize printable area */
-                margin: 1cm;
+                margin: 0.5cm 1cm;
             }
         }
 
-        /* --- Main Layout Container --- */
         .report-container {
-            max-width: 56rem;
+            width: 100%;
+            max-width: 100%;
             margin: 0 auto;
-             /* REDUCED FURTHER: Padding decreased */
-            padding: 0.8rem;
         }
 
-        /* --- Header Section --- */
+        /* --- Cabeçalho --- */
         .report-header {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            /* REDUCED FURTHER: Padding bottom decreased */
-            padding-bottom: 0.6rem;
+            align-items: center;
+            padding-bottom: 5px;
             border-bottom: 2px solid #000;
+            margin-bottom: 10px;
         }
         .report-header .logo {
-            height: 70px; /* Controls the height of the logo image */
-            width: auto; /* Maintains the aspect ratio */
+            height: 50px;
+            width: auto;
         }
         .report-header .details {
             text-align: right;
         }
         .report-header .details h2 {
-            /* REDUCED FURTHER: Font size decreased */
-            font-size: 0.95rem;
+            font-size: 14px;
             font-weight: 700;
+            margin: 0;
         }
         .report-header .details p {
-            font-size: 0.8rem;
-        }
-        .report-header .details p.code {
-            font-family: monospace;
-        }
-        .report-header .details p.date {
-            margin-top: 0.25rem;
+            font-size: 10px;
+            margin: 2px 0 0 0;
         }
 
-        /* --- General Section Styling --- */
-        .report-section {
-            /* REDUCED FURTHER: Margin top decreased */
-            margin-top: 0.6rem;
-        }
-
+        /* --- Títulos das Seções --- */
         .section-title {
-            /* REDUCED FURTHER: Font size and padding decreased */
-            font-size: 0.75rem;
+            font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
-            background-color: #f8fafc;
-            border: 1px solid #e2e8f0;
-            padding: 0.25rem 0.5rem;
-            color: #334155;
-        }
-        /* Ajustar Layout para Báu */
-        body.bau {
-            font-size: 10px;
-        }
-
-        body.bau .inspection-table td,
-        body.bau .inspection-table th {
-            padding: 0.18rem 0.35rem;
-        }
-
-        body.bau .report-section {
-            margin-top: 0.4rem;
-        }
-
-        body.bau .signature-area {
-            height: 50px;
-        }
-
-        body.bau .observations-box p {
-            min-height: 12px;
-        }
-
-        /* --- Dados Gerais Grid --- */
-        .data-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            /* REDUCED FURTHER: Gap and padding decreased */
-            gap: 0.3rem 1rem;
-            padding: 0.6rem;
-            border: 1px solid #e2e8f0;
-            border-top: 0;
-        }
-        .data-grid .col-span-2 { grid-column: span 2; }
-        .data-grid .col-span-3 { grid-column: span 3; }
-        .data-grid strong {
-            font-weight: 600;
-            color: #475569;
-        }
-        .data-grid .plate-tag {
-            font-family: monospace;
             background-color: #f1f5f9;
-            padding: 0.15rem 0.4rem;
-            border-radius: 0.25rem;
-            display: inline-block;
-            margin-right: 0.5rem;
-            font-size: 0.8rem;
+            border: 1px solid #cbd5e1;
+            padding: 4px 8px;
+            color: #334155;
+            margin-bottom: 0;
+            border-bottom: none;
         }
+
+        /* --- TABELA DE DADOS (Layout Fixo) --- */
+        .fixed-data-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin-bottom: 10px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .fixed-data-table td {
+            border: 1px solid #cbd5e1;
+            padding: 4px 6px;
+            vertical-align: top;
+            overflow: hidden;
+        }
+
+        .col-w-33 { width: 33.33%; }
         
-        /* --- Inspection Table --- */
+        .label {
+            display: block;
+            font-weight: 700;
+            color: #475569;
+            font-size: 9px;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
+        .value {
+            display: block;
+            font-size: 11px;
+            color: #000;
+            font-weight: 400;
+            white-space: normal;
+            word-wrap: break-word;
+            word-break: break-word; 
+        }
+
+        .value-produto {
+            font-size: 9px;
+            line-height: 1.1;
+            text-align: justify;
+        }
+
+        .plate-tag {
+            background-color: #e2e8f0;
+            border: 1px solid #94a3b8;
+            border-radius: 3px;
+            padding: 1px 4px;
+            margin-right: 4px;
+            font-family: monospace;
+            font-weight: 700;
+            display: inline-block;
+        }
+
+        /* --- Tabela de Inspeção --- */
         .inspection-table {
             width: 100%;
-            text-align: left;
             border-collapse: collapse;
+            table-layout: fixed;
+            margin-bottom: 5px;
         }
         .inspection-table th, .inspection-table td {
-            /* REDUCED FURTHER: Padding decreased for tighter cells */
-            padding: 0.25rem 0.4rem;
+            border: 1px solid #cbd5e1;
+            padding: 6px 8px; 
             vertical-align: middle;
-            border: 1px solid #e2e8f0;
+            word-wrap: break-word;
         }
-        .inspection-table thead {
-            font-size: 0.7rem;
-            color: #334155;
-            text-transform: uppercase;
+        .inspection-table td {
+            font-size: 11px; 
         }
-        .inspection-table th {
-            background-color: #f8fafc;
-        }
-        .inspection-table tbody {
-            /* REDUCED FURTHER: Smaller font for table content */
-            font-size: 0.7rem;
-        }
-        .inspection-table .category-cell {
+        .inspection-table thead th {
+            background-color: #f1f5f9;
+            text-align: left;
             font-weight: 700;
-            vertical-align: top;
-            background-color: #f8fafc;
+            font-size: 10px;
+            padding: 4px 8px;
         }
-        .inspection-table .result-cell {
-            font-weight: 500;
-        }
-        .inspection-table .w-1-4 { width: 25%; }
-        .inspection-table .w-1-2 { width: 50%; }
+        .text-center { text-align: center; }
 
-        /* --- Observations & Status --- */
-        .observations-box {
-            /* REDUCED FURTHER: Padding decreased */
-            padding: 0.6rem;
-            border: 1px solid #e2e8f0;
-            background-color: #f8fafc;
-            border-radius: 4px;
+        /* --- Footer e Assinaturas (AJUSTADO) --- */
+        .footer-section {
+            display: table;
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
         }
-        .observations-box h3 {
-            font-size: 0.85rem;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-            color: #334155;
-        }
-        .observations-box p {
-            min-height: 18px; /* REDUCED */
-        }
-        .status-box {
-            /* REDUCED FURTHER: Margin and padding decreased */
-            margin-top: 0.6rem;
-            padding: 0.3rem;
+        .footer-col {
+            display: table-cell;
+            width: 50%;
             text-align: center;
-            /* REDUCED FURTHER: Font size decreased */
-            font-size: 0.95rem;
-            font-weight: 700;
-            border: 2px solid #334155;
-            border-radius: 4px;
-        }
-        .status-box .status-text {
-            text-transform: uppercase;
+            vertical-align: bottom;
+            padding: 0 10px;
         }
 
-        /* --- Mandatory Section --- */
-        .mandatory-box {
-            /* REDUCED FURTHER: Font size and padding decreased */
-            font-size: 0.6rem;
-            color: #475569;
-            padding: 0.6rem;
-            border: 1px dashed #94a3b8;
-            border-radius: 4px;
-        }
-        .mandatory-box h3 {
-            font-weight: 700;
-            margin-bottom: 0.3rem;
-            color: #1e293b;
-            font-size: 0.7rem;
-        }
-        .mandatory-box ul {
-            list-style-type: disc;
-            list-style-position: inside;
-        }
-        .mandatory-box ul li {
-            margin-top: 0.15rem;
-        }
-
-        /* --- Footer & Signatures (REFACTORED) --- */
-        .report-footer {
-            margin-top: 1.5rem;
-            display: flex;
-            justify-content: space-around;
-            text-align: center;
-            padding-top: 0.75rem;
-            /* Align to top to prevent vertical shifting when names wrap */
-            align-items: flex-start;
-        }
-        .signature-block {
-            width: 13rem;
-            display: flex;
-            flex-direction: column;
-        }
-        /* NEW: Wrapper for the signature image. Provides a fixed height and the signature line */
+        /* ÁREA DA IMAGEM - Ocupa espaço mas permite invasão */
         .signature-area {
-            height: 65px; /* Increased height for a larger signature area */
+            height: 80px; /* Altura generosa para a imagem */
             display: flex;
-            align-items: center;
+            align-items: flex-end; 
             justify-content: center;
-            border-bottom: 1px solid #000; /* This is the signature line */
-            margin-bottom: 0.4rem; /* Space between line and the name below it */
+            /* MARGEM NEGATIVA: Puxa o elemento seguinte (a linha) para cima da imagem */
+            margin-bottom: -15px; 
+            position: relative;
+            z-index: 10;
         }
         .signature-img {
-            max-height: 60px; /* Increased max-height to allow a larger signature image */
-            max-width: 100%;
+            max-height: 80px; 
+            max-width: 90%;
             object-fit: contain;
-            mix-blend-mode: darken;
         }
-        .signature-block .name {
-            font-weight: 600;
-            font-size: 0.75rem;
-            /* Line is now handled by .signature-area */
+
+        /* A LINHA E O NOME */
+        .signature-name-line {
+            border-top: 1px solid #000; /* A linha física */
+            /* PADDING PEQUENO: Mantém o nome colado na linha */
+            padding-top: 5px; 
+            width: 80%;
+            margin: 0 auto;
+            position: relative;
+            z-index: 11; /* Texto fica acima da imagem se houver sobreposição total */
+            background-color: rgba(255,255,255, 0.4); /* Leve fundo branco caso a assinatura seja muito escura */
         }
-        .signature-block .role {
-            font-size: 0.7rem;
+
+        /* --- Status e Obs --- */
+        .obs-container {
+            border: 1px solid #cbd5e1;
+            padding: 5px;
+            background: #f8fafc;
+            min-height: 40px;
+        }
+        .status-badge {
+            border: 2px solid #333;
+            padding: 5px;
+            text-align: center;
+            font-weight: bold;
+            display: inline-block;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .status-liberado { color: green; border-color: green; }
+        .status-reprovado { color: red; border-color: red; }
+
+        /* --- OBRIGATÓRIO (COMPACTO) --- */
+        .mandatory-box {
+            font-size: 8px;
             color: #475569;
+            padding: 4px 8px;
+            border: 1px dashed #94a3b8;
+            border-radius: 4px;
+            margin-top: 8px;
+            line-height: 1.2;
+            background-color: #fff;
         }
+        .mandatory-box h3 {
+            font-size: 8px;
+            font-weight: 700;
+            display: inline;
+            margin-right: 5px;
+            text-transform: uppercase;
+            color: #000;
+        }
+        .mandatory-box ul {
+            display: inline;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .mandatory-box li {
+            display: inline;
+        }
+        .mandatory-box li::after {
+            content: " | ";
+            color: #ccc;
+        }
+        .mandatory-box li:last-child::after {
+            content: "";
+        }
+
+        /* Utilitários */
+        .bg-gray { background-color: #f8fafc; font-weight: 700; }
     </style>
 </head>
-<body class="{% if tipo_veiculo in ['Baú','Bau'] %}bau{% endif %}">
-    <div class="report-container">
+<body>
 
-        <!-- HEADER -->
+    <div class="report-container">
+        
         <header class="report-header">
             <div>
-                <img src="Logo Pirahy só nome vermelho.png" alt="Logo Pirahy" class="logo">
+                <img src="Logo Pirahy só nome vermelho.png" alt="Logo" class="logo">
             </div>
             <div class="details">
-                <h2>CHECK LIST DE INSPEÇÃO DE VEÍCULOS - {{ local_vistoria }}</h2>
-                <p class="code">RQ-SGSA-10-06-001</p>
-                <p class="date">Elaborado em: {{ data }}</p>
+                <h2>CHECK LIST DE INSPEÇÃO - {{ local_vistoria }}</h2>
+                <p>RQ-SGSA-10-06-001 | Data: {{ data }}</p>
             </div>
         </header>
 
-        <!-- DADOS GERAIS -->
-        <section class="report-section">
-            <h3 class="section-title">Dados Gerais da Vistoria</h3>
-            <div class="data-grid">
-                <div><strong>Chegada:</strong> {{ chegada }}</div>
-                <div><strong>Vistoria:</strong> {{ vistoria }}</div>
-                <div><strong>Nº Ordem:</strong> {{ ordem }}</div>
-                <div class="col-span-3"><strong>Transportadora:</strong> {{ transportadora }}</div>
-                <div class="col-span-3">
-                    <strong>Placas:</strong>
-                    {% for placa in placas %}
-                        {% if placa %}
-                        <span class="plate-tag">{{ placa }}</span>
-                        {% endif %}
-                    {% endfor %}
-                </div>
-                <div><strong>Operação:</strong> {{ operacao }}</div>
-                <div><strong>Produto:</strong> {{ produto }}</div>
-                <div><strong>Tipo de Veículo:</strong> {{ tipo_veiculo }}</div>
-                <div class="col-span-3"><strong>3 Últimos Produtos:</strong> {{ ultimos_produtos }}</div>
-            </div>
-        </section>
+        <div class="section-title">Dados Gerais da Vistoria</div>
+        <table class="fixed-data-table">
+            <colgroup>
+                <col class="col-w-33">
+                <col class="col-w-33">
+                <col class="col-w-33">
+            </colgroup>
+            <tbody>
+                <tr>
+                    <td>
+                        <span class="label">Chegada</span>
+                        <span class="value">{{ chegada }}</span>
+                    </td>
+                    <td>
+                        <span class="label">Vistoria</span>
+                        <span class="value">{{ vistoria }}</span>
+                    </td>
+                    <td>
+                        <span class="label">Final</span>
+                        <span class="value">{{ fim }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <span class="label">Transportadora</span>
+                        <span class="value">{{ transportadora }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <span class="label">Placas</span>
+                        <span class="value">
+                            {% for placa in placas %}
+                                <span class="plate-tag">{{ placa }}</span>
+                            {% endfor %}
+                        </span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <span class="label">Operação</span>
+                        <span class="value">{{ operacao }}</span>
+                    </td>
+                    <td>
+                        <span class="label">Nº Ordem</span>
+                        <span class="value">{{ ordem }}</span>
+                    </td>
+                </tr>
+                 <tr>
+                    <td colspan="3">
+                        <span class="label">Tipo de Veículo</span>
+                        <span class="value">{{ tipo_veiculo }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <span class="label">Produto</span>
+                        <span class="value value-produto">{{ produto }}</span>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <span class="label">3 Últimos Produtos</span>
+                        <span class="value">{{ ultimos_produtos }}</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
 
-        <!-- ITENS DE INSPEÇÃO -->
-        <section class="report-section">
-            <h3 class="section-title">Itens de Inspeção</h3>
-            <table class="inspection-table">
-                <thead>
-                    <tr>
-                        <th class="w-1-4">Inspeção</th>
-                        <th class="w-1-2">Verificação</th>
-                        <th class="w-1-4">Condições</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Parte Interna Veículo -->
-                    <tr>
-                        <td rowspan="6" class="category-cell">Parte Interna Veículo</td>
-                        <td>Limpeza e isenção de materiais estranhos, pragas e seus vestígios.</td>
-                        <td class="result-cell">{{ limpeza }}</td>
-                    </tr>
-                    <tr>
-                        <td>Ausência de danos na estrutura (assoalho, teto e laterais).</td>
-                        <td class="result-cell">{{ danos }}</td>
-                    </tr>
-                    <tr>
-                        <td>Ausência de umidade, infiltração ou vazamento.</td>
-                        <td class="result-cell">{{ umidade }}</td>
-                    </tr>
-                    <tr>
-                        <td>Ausência de resíduos de produtos anteriores.</td>
-                        <td class="result-cell">{{ residuos }}</td>
-                    </tr>
-                    <tr>
-                        <td>Ausência de odores estranhos (impregnantes ou residuais).</td>
-                        <td class="result-cell">{{ odores }}</td>
-                    </tr>
-                    <tr>
-                        <td>As bocas graneleiras/visitas estão devidamente vedadas.</td>
-                        <td class="result-cell">{{ bocas_graneleiras }}</td>
-                    </tr>
+        <div class="section-title">Itens de Inspeção</div>
+        <table class="inspection-table">
+            <colgroup>
+                <col style="width: 20%">
+                <col style="width: 65%">
+                <col style="width: 15%">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>Área</th>
+                    <th>Item Verificado</th>
+                    <th class="text-center">Cond.</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td rowspan="6" class="bg-gray">Parte Interna</td>
+                    <td>Limpeza e isenção de materiais estranhos/pragas.</td>
+                    <td class="text-center">{{ limpeza }}</td>
+                </tr>
+                <tr>
+                    <td>Ausência de danos na estrutura.</td>
+                    <td class="text-center">{{ danos }}</td>
+                </tr>
+                <tr>
+                    <td>Ausência de umidade/infiltração.</td>
+                    <td class="text-center">{{ umidade }}</td>
+                </tr>
+                <tr>
+                    <td>Ausência de resíduos anteriores.</td>
+                    <td class="text-center">{{ residuos }}</td>
+                </tr>
+                <tr>
+                    <td>Ausência de odores estranhos.</td>
+                    <td class="text-center">{{ odores }}</td>
+                </tr>
+                <tr>
+                    <td>Bocas graneleiras vedadas.</td>
+                    <td class="text-center">{{ bocas_graneleiras }}</td>
+                </tr>
 
-                    <!-- Proteção de Carga -->
-                    <tr>
-                        <td rowspan="5" class="category-cell">Proteção de Carga</td>
-                        <td>As lonas de cobertura do veículo estão em boas condições.</td>
-                        <td class="result-cell">{{ lonas }}</td>
-                    </tr>
-                    <tr>
-                        <td>As chapas de MDF estão em boas condições.</td>
-                        <td class="result-cell">{{ chapas_mdf }}</td>
-                    </tr>
-                    <tr>
-                        <td>As lonas de proteção dos paletes estão em boas condições.</td>
-                        <td class="result-cell">{{ lonas_protecao }}</td>
-                    </tr>
-                    <tr>
-                        <td>Os equipamentos de amarração estão em boas condições.</td>
-                        <td class="result-cell">{{ equipamentos }}</td>
-                    </tr>
-                    <tr>
-                        <td>As tampas laterais estão em boas condições.</td>
-                        <td class="result-cell">{{ tampas_laterais }}</td>
-                    </tr>
-                </tbody>
+                <tr>
+                    <td rowspan="5" class="bg-gray">Proteção</td>
+                    <td>Lonas de cobertura em boas condições.</td>
+                    <td class="text-center">{{ lonas }}</td>
+                </tr>
+                <tr>
+                    <td>Chapas de MDF em boas condições.</td>
+                    <td class="text-center">{{ chapas_mdf }}</td>
+                </tr>
+                <tr>
+                    <td>Lonas de paletes em boas condições.</td>
+                    <td class="text-center">{{ lonas_protecao }}</td>
+                </tr>
+                <tr>
+                    <td>Equipamentos de amarração.</td>
+                    <td class="text-center">{{ equipamentos }}</td>
+                </tr>
+                <tr>
+                    <td>Tampas laterais.</td>
+                    <td class="text-center">{{ tampas_laterais }}</td>
+                </tr>
 
-                <!-- Conditional: Caminhão Baú -->
                 {% if tipo_veiculo == 'Baú' or tipo_veiculo == 'Bau' %}
-                <tbody>
-                    <tr>
-                        <td rowspan="3" class="category-cell">Caminhão Baú</td>
-                        <td>A altura da porta do baú é compatível com a plataforma.</td>
-                        <td class="result-cell">{{ bau_altura_porta }}</td>
-                    </tr>
-                    <tr>
-                        <td>A largura da porta do baú é compatível com a plataforma.</td>
-                        <td class="result-cell">{{ bau_largura_porta }}</td>
-                    </tr>
-                    <tr>
-                        <td>O assoalho do baú é liso e está em boas condições.</td>
-                        <td class="result-cell">{{ bau_assoalho }}</td>
-                    </tr>
-                </tbody>
+                <tr>
+                    <td rowspan="3" class="bg-gray">Baú</td>
+                    <td>Altura da porta compatível.</td>
+                    <td class="text-center">{{ bau_altura_porta }}</td>
+                </tr>
+                <tr>
+                    <td>Largura da porta compatível.</td>
+                    <td class="text-center">{{ bau_largura_porta }}</td>
+                </tr>
+                <tr>
+                    <td>Assoalho liso e boas condições.</td>
+                    <td class="text-center">{{ bau_assoalho }}</td>
+                </tr>
                 {% endif %}
 
-                <!-- Conditional: Container -->
-                {% if tipo_veiculo == 'Container' %}
-                <tbody>
-                    <tr>
-                        <td class="category-cell">Container</td>
-                        <td>A verificação do peso do container foi realizada.</td>
-                        <td class="result-cell">{{ container_peso }}</td>
-                    </tr>
-                </tbody>
+                 {% if tipo_veiculo == 'Container' %}
+                <tr>
+                    <td class="bg-gray">Container</td>
+                    <td>A verificação do peso do container foi realizada.</td>
+                    <td class="text-center">{{ container_peso }}</td>
+                </tr>
                 {% endif %}
-            </table>
-        </section>
+            </tbody>
+        </table>
 
-        <!-- OBSERVAÇÕES E STATUS -->
-        <section class="report-section">
-             <div class="observations-box">
-                <h3>Observações:</h3>
-                <p>{{ observacoes }}</p>
-            </div>
-            <div class="status-box">
-                Caminhão Liberado? <span class="status-text">{{ status_final }}</span>
-            </div>
-        </section>
+        <table style="width: 100%; border-collapse: collapse; margin-top: 5px;">
+            <tr>
+                <td style="width: 80%; padding-right: 10px; border: none; vertical-align: top;">
+                    <div class="obs-container">
+                        <span class="label">Observações:</span>
+                        <div class="value" style="font-size: 10px;">{{ observacoes }}</div>
+                    </div>
+                </td>
+                <td style="width: 20%; border: none; vertical-align: top;">
+                    <div class="status-badge {% if status_final == 'Sim' %}status-liberado{% else %}status-reprovado{% endif %}">
+                        <div style="font-size: 8px; text-transform: uppercase;">Veículo</div>
+                        <div style="font-size: 14px;">{% if status_final == 'Sim' %}LIBERADO{% else %}REPROVADO{% endif %}</div>
+                    </div>
+                </td>
+            </tr>
+        </table>
 
-        <!-- OBRIGATÓRIO -->
-        <section class="report-section mandatory-box">
+        <div class="mandatory-box">
             <h3>Obrigatório:</h3>
             <ul>
-                <li>É obrigatório o uso de calças compridas, camisa e sapatos fechados pelo motorista.</li>
-                <li>No caso de transporte de Arroz Orgânico, deverão ser utilizados produtos para higienização dos equipamentos que sejam permitidos na produção orgânica (caso seja necessário, a lista está com o supervisor).</li>
-                <li>Durante o transporte, os produtos orgânicos deverão ser devidamente acondicionados e identificados, assegurando sua separação dos produtos não orgânicos.</li>
+                <li>Uso de calças, camisa e sapatos fechados</li>
+                <li>Arroz Orgânico: higienização com produtos permitidos</li>
+                <li>Orgânicos acondicionados/identificados e separados</li>
             </ul>
-        </section>
+        </div>
 
-        <!-- ASSINATURAS (REFACTORED) -->
-         <footer class="report-footer">
-            <div class="signature-block">
+        <div class="footer-section">
+            <div class="footer-col">
                 <div class="signature-area">
-                    <img src="{{ assinaturas.motorista.imagem }}" class="signature-img" alt="Assinatura Motorista">
+                    {% if assinaturas.motorista.imagem %}
+                        <img src="{{ assinaturas.motorista.imagem }}" class="signature-img">
+                    {% endif %}
                 </div>
-                <p class="name">{{ assinaturas.motorista.nome }}</p>
-                <p class="role">Motorista</p>
+                <div class="signature-name-line">
+                    <div class="value font-bold">{{ assinaturas.motorista.nome }}</div>
+                    <div class="label">Motorista</div>
+                </div>
             </div>
-            <div class="signature-block">
+            <div class="footer-col">
                 <div class="signature-area">
-                    <img src="{{ assinaturas.vistoriador.imagem }}" class="signature-img" alt="Assinatura Vistoriador">
+                    {% if assinaturas.vistoriador.imagem %}
+                        <img src="{{ assinaturas.vistoriador.imagem }}" class="signature-img">
+                    {% endif %}
                 </div>
-                <p class="name">{{ assinaturas.vistoriador.nome }}</p>
-                <p class="role">Vistoriador/Qualidade</p>
+                <div class="signature-name-line">
+                    <div class="value font-bold">{{ assinaturas.vistoriador.nome }}</div>
+                    <div class="label">Vistoriador/Qualidade</div>
+                </div>
             </div>
-        </footer>
+        </div>
+
     </div>
 </body>
 </html>

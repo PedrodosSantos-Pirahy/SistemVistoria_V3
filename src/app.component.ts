@@ -1,59 +1,98 @@
-import { Component, ChangeDetectionStrategy, signal } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, OnInit, computed } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { FormComponent } from './components/form/form.component';
 import { PainelComponent } from './components/painel/painel.component';
 import { HistoricoComponent } from './components/historico/historico.component';
+import { AgendamentoComponent } from './components/agend/agendamento.component';
+import { MonitoramentoComponent } from './components/monitoramento/monitoramento.component';
+import { LoginComponent } from './components/login/login.component';
 
 @Component({
   selector: 'app-root',
-  templateUrl: './app.component.html',
-  changeDetection: ChangeDetectionStrategy.OnPush,
+  standalone: true,
   imports: [
+    CommonModule,
     FormComponent,
     PainelComponent,
     HistoricoComponent,
-  ]
+    AgendamentoComponent,
+    MonitoramentoComponent,
+    LoginComponent
+  ],
+  templateUrl: './app.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AppComponent {
+export class AppComponent implements OnInit {
 
-  // controla qual tela aparece (mesma rota)
-  readonly view = signal<'list' | 'form' | 'historico'>('list');
+  isLogado = signal(false);
+  
+  readonly selectedInspection = signal<{ placa: string; id: string } | null>(null);
+  readonly view = signal<'list' | 'form' | 'historico' | 'agendamento' | 'monitoramento' | null>(null);
+  
+  usuarioNome = signal('');
+  usuarioCargo = signal('');
 
-  // vistoria selecionada (ID técnico + placa para exibição)
-  readonly selectedInspection = signal<{
-  placa: string;
-  id: string;
-} | null>(null);
+  // --- PERMISSÕES ---
+  isAdmin = computed(() => ['ADM', 'TI'].includes(this.usuarioCargo()));
+  
+  isExpedicao = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
+  isVistoriador = computed(() => this.usuarioCargo() === 'VIS' || this.isAdmin());
+  isCarregamento = computed(() => this.usuarioCargo() === 'CAR' || this.isAdmin());
+  
+  // ✨ NOVO: Permissão para Balança (BAL)
+  isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
 
+  // 🔥 ATUALIZADO: Adicionado isBalanca() na regra de quem vê o monitoramento
+  podeVerMonitoramento = computed(() => 
+    this.isExpedicao() || this.isCarregamento() || this.isBalanca()
+  );
 
-  // navegação pela navbar
-  setView(view: 'list'): void {
-    this.selectedInspection.set(null);
+  ngOnInit() {
+    const dados = localStorage.getItem('usuario_logado');
+    if (dados) {
+      const user = JSON.parse(dados);
+      this.isLogado.set(true);
+      this.usuarioNome.set(user.nome);
+      this.usuarioCargo.set(user.cargo);
+
+      const cargo = this.usuarioCargo();
+      
+      // 🔥 ATUALIZADO: Se for BAL, também vai direto pro Monitoramento ao logar
+      if (cargo === 'EXP' || cargo === 'CAR' || cargo === 'BAL') {
+        this.view.set('monitoramento');
+      } else {
+        // Vistoriadores e Admins começam no Painel
+        this.view.set('list');
+      }
+
+    } else {
+      this.isLogado.set(false);
+    }
+  }
+
+  logout() {
+    localStorage.removeItem('usuario_logado');
+    this.isLogado.set(false);
+    window.location.reload();
+  }
+
+  setView(view: 'list' | 'form' | 'historico' | 'agendamento' | 'monitoramento'): void {
+    if (view === 'list') this.selectedInspection.set(null);
     this.view.set(view);
   }
 
-  // chamado pelo Painel ao clicar numa vistoria
   onInspectionSelected(inspection: { placa: string; id: string }) {
-  console.log('APP RECEBEU:', inspection);
-
-  this.selectedInspection.set({
-    placa: inspection.placa,
-    id: inspection.id
-  });
-
-  this.view.set('form');
-}
-
-
-  // usado apenas para exibição no template (placa)
-  get placaSelecionada(): string | null {
-    return this.selectedInspection()?.placa ?? null;
+    this.selectedInspection.set(inspection);
+    this.view.set('form');
   }
-  irParaHistorico() {
-    this.view.set('historico');
-  }
-  // voltar do formulário para o painel
+
   goBack(): void {
     this.selectedInspection.set(null);
-    this.view.set('list');
+    // 🔥 ATUALIZADO: Balança também volta pro monitoramento ao sair de um detalhe
+    if (this.isVistoriador()) {
+      this.view.set('list');
+    } else {
+      this.view.set('monitoramento'); 
+    }
   }
 }

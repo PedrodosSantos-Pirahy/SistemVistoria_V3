@@ -1,0 +1,54 @@
+<div class="min-h-screen flex items-center justify-center bg-[#f8f6f2]">
+  <div class="bg-white p-8 rounded-xl shadow-xl w-full max-w-md border border-[#eadfce]">
+    
+    <div class="text-center mb-8">
+      <h1 class="text-2xl font-black text-[#6b2b1f] uppercase tracking-tighter">Acesso Restrito</h1>
+      <p class="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Sistema de Vistoria</p>
+    </div>
+
+    <form (ngSubmit)="entrar()" class="space-y-6">
+      
+      <div>
+        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Usuário</label>
+        <input type="text" 
+               [(ngModel)]="usuario" 
+               name="usuario"
+               placeholder="Digite seu usuário"
+               required
+               class="w-full bg-[#fdfbf9] border border-[#eadfce] rounded-lg p-3 text-[#6b2b1f] font-bold focus:border-[#6b2b1f] focus:outline-none transition-all placeholder:text-gray-300">
+      </div>
+
+      <div>
+        <label class="block text-[10px] font-black text-gray-400 uppercase mb-1 ml-1">Senha</label>
+        <input type="password" 
+               [(ngModel)]="senha" 
+               name="senha"
+               placeholder="••••••"
+               required
+               class="w-full bg-[#fdfbf9] border border-[#eadfce] rounded-lg p-3 text-[#6b2b1f] font-bold focus:border-[#6b2b1f] focus:outline-none transition-all placeholder:text-gray-300">
+      </div>
+
+      <button type="submit" 
+              [disabled]="loading()"
+              class="w-full py-3 bg-[#6b2b1f] text-white rounded-lg font-black text-xs uppercase tracking-widest shadow-lg hover:brightness-110 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2">
+        
+        @if (loading()) {
+          <svg class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <span>Validando...</span>
+        } @else {
+          <span>Acessar Sistema</span>
+        }
+      </button>
+
+      @if (erro()) {
+        <div class="bg-red-50 border border-red-200 text-red-600 text-xs font-bold p-3 rounded-lg text-center animate-pulse">
+          {{ erro() }}
+        </div>
+      }
+
+    </form>
+  </div>
+</div>

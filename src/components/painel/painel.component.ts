@@ -15,6 +15,7 @@ interface Inspection {
   categoria_data: string;
   data?: string;
   local?: string;
+  hora: string;
 }
 
 
@@ -74,6 +75,8 @@ export class PainelComponent implements OnInit {
   constructor(private router: Router) { }
 
   ngOnInit(): void {
+    this.configurarFiltroUsuario();
+
     this.fetchInspections();
 
     // 🔁 força atualização a cada 10 segundos
@@ -96,27 +99,22 @@ export class PainelComponent implements OnInit {
 
 
 
-  async fetchInspections(force = false): Promise<void> {
+async fetchInspections(force = false): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
     try {
       const timestamp = new Date().getTime();
       if (force) console.log('🔄 Forçando atualização manual...');
-      // 2. Adicione &force=true se o parâmetro force for verdadeiro
+      
+      // URL apontando para a sua API Python conectada ao Banco
       const url = `http://192.168.53.193:5000/pendencias?t=${timestamp}${force ? '&force=true' : ''}`;
       
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Cache-Control': 'no-cache'
         }
-      /* Metodo de produção
-       const response = await fetch("/api/pendencias", {
-       
-      const response = await fetch("http://192.168.53.193:5000/pendencias", {
-        method: 'GET' */
       });
 
       if (!response.ok) {
@@ -124,60 +122,58 @@ export class PainelComponent implements OnInit {
       }
 
       const data = await response.json();
-
-      /**
-       * Espera-se que a API retorne:
-       * pendentes: [{ placa: string, status: string }]
-       */
-      const pendentes = data.pendentes;
+      const pendentes = data.pendentes; // O Python envia dentro de "pendentes"
 
       if (!Array.isArray(pendentes)) {
         console.error('A resposta da API não é um array válido:', pendentes);
         throw new Error('Formato de dados inesperado da API.');
       }
 
-      /**
-       * Converte os objetos da API
-       * mantendo placa + status
-       */
-      // Dentro do seu .map no fetchInspections:
-const parsedInspections: Inspection[] = pendentes
-  .map((item: any) => {
-    if (!item?.placa || !item?.status || !item?.id) {
-      console.warn('Item inválido ignorado:', item);
-      return null;
-    }
+      // --- MAPEAMENTO DO BANCO DE DADOS PARA O FRONTEND ---
+      const parsedInspections: Inspection[] = pendentes
+        .map((item: any) => {
+          // Validação básica para não quebrar a lista
+          if (!item?.id) { 
+             console.warn('Item sem ID ignorado:', item);
+             return null; 
+          }
 
-    return {
-      placa: item.placa,
-      status: item.status,
-      id: item.id,
-      data: item.data,
-      pre_ordem: item.pre_ordem,
-      transportadora: item.transportadora,
-      categoria_data: item.categoria_data?.trim(),
-      // ⬇️ ADICIONE ESTA LINHA ABAIXO ⬇️
-      // Certifique-se que 'item.local' é o nome que vem do seu Python
-      local: item.local || 'Filial' // Exemplo: se vier vazio, assume Matriz
-    };
-  })
-  .filter(item => item !== null) as Inspection[];
+          return {
+            id: String(item.id), // Garante que ID seja string
+            placa: item.placa || 'SEM PLACA',
+            
+            // O Python calcula isso (Atrasado, Em Breve, Pendente...)
+            status: item.status || 'Pendente', 
+            
+            data: item.data, // Vem como DD/MM/YYYY do Python
 
+            hora: item.hora,
+            
+            // Mapeia o campo do banco (pre_ordem1) ou o que o Python enviou (pre_ordem)
+            pre_ordem: item.pre_ordem || item.pre_ordem1 || '', 
+            
+            transportadora: item.transportadora || 'Consultar Cadastro',
+            
+            // Essencial para os filtros (Data Atual, Datas Futuras) funcionarem
+            categoria_data: item.categoria_data?.trim(),
+            
+            // Se o banco não tiver local, assume Matriz para aparecer no filtro
+            local: item.local 
+          };
+        })
+        .filter(item => item !== null) as Inspection[];
 
-      // Atualiza o estado do painel
+      // Atualiza o sinal com a lista limpa
       this.inspections.set(parsedInspections);
-      if (force) {
-        // Se quiser algo mais sutil, use um Toast, mas por enquanto:
-        console.log('✅ Lista atualizada manualmente com sucesso!');
-      }
+      
+      if (force) console.log('✅ Lista atualizada do banco de dados!');
+
     } catch (err) {
       console.error('Erro ao buscar dados da API:', err);
-
       let errorMessage = 'Não foi possível carregar as vistorias.';
       if (err instanceof Error) {
-        errorMessage = `Não foi possível conectar a API na rede. Detalhes: ${err.message}`;
+        errorMessage = `Erro de conexão com o banco/API: ${err.message}`;
       }
-
       this.error.set(errorMessage);
       this.inspections.set([]);
     } finally {
@@ -202,20 +198,54 @@ readonly vistoriasFiltradas = computed(() => {
   const dataRef = this.tipoFiltro();
   const localRef = this.tipoLocal();
 
-  return lista.filter(v => {
-    // Filtra por data (se for 'Tudo', ignora)
+  return lista.filter((v: Inspection) => {
+    
+    // Filtra por data
     const matchData = dataRef === 'Todas as Datas' || v.categoria_data === dataRef;
     
-    // Filtra por local (se for 'Qualquer', ignora)
+    // Filtra por local
     const matchLocal = localRef === 'Qualquer' || v.local === localRef;
 
     return matchData && matchLocal;
   });
 });
+// DENTRO DA CLASSE PainelComponent:
+
+  // 🔥 CONTADORES INTELIGENTES (Respeitam o Local Selecionado)
+  readonly contadores = computed(() => {
+    const lista = this.inspections(); // Pega tudo
+    const localAtual = this.tipoLocal(); // Vê qual botão de local está marcado (ex: 'Filial')
+
+    // 1. Primeiro filtra pelo local ativo
+    const listaDoLocal = lista.filter(item => 
+      localAtual === 'Qualquer' ? true : item.local === localAtual
+    );
+
+    // 2. Agora conta baseado nessa lista filtrada
+    return {
+      hoje: listaDoLocal.filter(i => i.categoria_data === 'Data Atual').length,
+      futuras: listaDoLocal.filter(i => i.categoria_data === 'Datas Futuras').length,
+      
+      // Total pendente da unidade selecionada
+      total: listaDoLocal.length 
+    };
+  });
 
   private pollingInterval!: number;
 
-
+configurarFiltroUsuario() {
+    const dados = localStorage.getItem('usuario_logado');
+    if (dados) {
+      const user = JSON.parse(dados);
+      
+      // Se o usuário tiver local definido (Matriz ou Filial), já seta o filtro
+      if (user.local && (user.local === 'Matriz' || user.local === 'Filial')) {
+        this.tipoLocal.set(user.local);
+      } else {
+        this.tipoLocal.set('Qualquer'); // Admin ou sem local vê tudo
+      }
+    }
+  }
   selectInspection(inspection: Inspection) {
     if (this.showDecisionModal()) return;
 
@@ -244,7 +274,7 @@ readonly vistoriasFiltradas = computed(() => {
 
   }
 
-  async confirmarCancelamento() {
+async confirmarCancelamento() {
     const inspection = this.selectedInspection();
 
     if (!inspection || !inspection.id) {
@@ -253,13 +283,14 @@ readonly vistoriasFiltradas = computed(() => {
     }
 
     const payload = {
-      id: inspection.id, // 🔑 VEM DO JSON DE PENDENCIAS
+      id: inspection.id,
       nome: this.nomeCancelamento,
       motivo: this.motivo
     };
 
     console.log('ENVIANDO CANCELAMENTO:', payload);
 
+    // 🔥 ADICIONADO O http:// ABAIXO
     const response = await fetch('http://192.168.53.193:5000/cancelar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -267,16 +298,6 @@ readonly vistoriasFiltradas = computed(() => {
     });
 
     const result = await response.json();
-
-    if (!response.ok) {
-      alert(result.error || 'Erro ao cancelar');
-      return;
-    }
-
-
-    this.fecharModal();
-
-
-
-  };
+    // ... restante do código
+}
 }

@@ -2,21 +2,13 @@
     npm ci
     npm run build --prod
 -->
-<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg">
+<div class="bg-white p-6 sm:p-8 rounded-xl shadow-lg border-t-4 border-[#6b2b1f]">
 
   @if (submittedData()) {
     <div class="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 rounded-md mb-6" role="alert">
       <p class="font-bold">Dados Enviados com Sucesso!</p>
       <p>As informações foram registradas e enviadas para o servidor.</p>
-      <pre class="mt-2 text-sm bg-gray-800 text-white p-3 rounded-md overflow-x-auto"><code>{{ submittedData() }}</code></pre>
-    </div>
-  }
-
-  @if (submissionError()) {
-    <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md mb-6" role="alert">
-      <p class="font-bold">Erro ao Enviar</p>
-      <p>{{ submissionError() }}</p>
-    </div>
+      </div>
   }
 
   @if (submissionError()) {
@@ -28,333 +20,428 @@
 
   <form [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
 
-    <!-- Progress Bar -->
     <div class="mb-8">
         <div class="flex justify-between mb-2">
             <div>
-              <span class="text-base font-semibold text-indigo-700">Etapa {{ currentStep() }} de {{ totalSteps }}</span>
-              <span class="text-sm font-medium text-gray-600 ml-2">{{ currentStepName() }}</span>
+              <span class="text-base font-black text-[#6b2b1f] uppercase tracking-wide">Etapa {{ currentStep() }} de {{ totalSteps }}</span>
+              <span class="text-sm font-bold text-gray-500 ml-2 uppercase">{{ currentStepName() }}</span>
             </div>
-            <span class="text-sm font-medium text-indigo-700">{{ ((currentStep() ) / totalSteps * 100).toFixed(0) }}% Completo</span>
+            <span class="text-sm font-bold text-[#6b2b1f]">{{ ((currentStep() ) / totalSteps * 100).toFixed(0) }}% Completo</span>
         </div>
-        <div class="w-full bg-gray-200 rounded-full h-2.5">
-            <div class="bg-indigo-600 h-2.5 rounded-full transition-all duration-500" [style.width.%]="((currentStep() -1) / totalSteps) * 100"></div>
+        <div class="w-full bg-gray-200 rounded-full h-3">
+            <div class="bg-[#6b2b1f] h-3 rounded-full transition-all duration-500" [style.width.%]="((currentStep() -1) / totalSteps) * 100"></div>
         </div>
     </div>
 
 
     @switch (currentStep()) {
       @case (1) {
-        <!-- Seção Dados Iniciais -->
         <div formGroupName="dadosIniciais">
-          <h2 class="text-xl font-semibold text-gray-800 mb-6">Dados Iniciais</h2>
+          <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Dados Iniciais</h2>
           <div class="space-y-6">
-            <!-- Horários -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div>
-                <label for="chegada" class="block text-sm font-medium text-gray-700 mb-1">Chegada</label>
+                <label for="chegada" class="block text-xs font-bold uppercase text-gray-500 mb-1">Chegada</label>
                 <input type="datetime-local" 
-            id="chegada"
-            formControlName="chegada"
-            max="9999-12-31T23:59"
-            class="block w-full px-4 py-2 border rounded-md shadow-sm"
-
-                      [class.border-red-500]="form.controls.dadosIniciais.controls.chegada.invalid && form.controls.dadosIniciais.controls.chegada.touched"
-                      [class.border-gray-300]="form.controls.dadosIniciais.controls.chegada.valid || form.controls.dadosIniciais.controls.chegada.untouched">
+                    id="chegada"
+                    formControlName="chegada"
+                    max="9999-12-31T23:59"
+                    class="block w-full px-4 py-3 border rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none"
+                    [class.border-red-500]="form.controls.dadosIniciais.controls.chegada.invalid && form.controls.dadosIniciais.controls.chegada.touched"
+                    [class.border-gray-300]="form.controls.dadosIniciais.controls.chegada.valid || form.controls.dadosIniciais.controls.chegada.untouched">
                 @if (form.controls.dadosIniciais.controls.chegada.invalid && form.controls.dadosIniciais.controls.chegada.touched) {
-                  <p class="mt-1 text-xs text-red-600">A data e hora da chegada são obrigatórias.</p>
+                  <p class="mt-1 text-xs text-red-600 font-bold">A data e hora da chegada são obrigatórias.</p>
                 }
               </div>
               <div>
-                <label for="vistoria" class="block text-sm font-medium text-gray-700 mb-1">Vistoria</label>
+                <label for="vistoria" class="block text-xs font-bold uppercase text-gray-500 mb-1">Vistoria</label>
                 <div class="flex items-center gap-2">
                   <input type="datetime-local" id="vistoria" formControlName="vistoria"
-                        class="block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm bg-gray-100 cursor-not-allowed"
+                        class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-gray-100 cursor-not-allowed"
                         placeholder="Aguardando registro...">
-                  <button type="button" (click)="registrarVistoria()" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 whitespace-nowrap">Registrar</button>
+                  <button type="button" (click)="registrarVistoria()" class="px-4 py-3 bg-[#6b2b1f] text-white font-bold uppercase text-xs rounded-lg hover:bg-[#502017] whitespace-nowrap shadow-md transition-transform active:scale-95">Registrar</button>
                 </div>
                 @if (form.controls.dadosIniciais.controls.vistoria.invalid && form.controls.dadosIniciais.controls.vistoria.touched) {
-                  <p class="mt-1 text-xs text-red-600">O registro da vistoria é obrigatório.</p>
+                  <p class="mt-1 text-xs text-red-600 font-bold">O registro da vistoria é obrigatório.</p>
                 }
               </div>
             </div>
-           <!-- LOCAL DA VISTORIA -->
-          <div class="mt-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
+
+           <div class="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <label class="block text-xs font-bold uppercase text-gray-500 mb-2">
               Local da vistoria <span class="text-red-600">*</span>
             </label>
 
             <div class="flex gap-6">
 
-              <!-- FILIAL -->
               <label
-                class="flex items-center gap-2 cursor-pointer
-                      border rounded-md px-4 py-2
-                      hover:border-gray-500
-                      transition"
-                [class.border-indigo-600]="form.get('dadosIniciais.localVistoria')?.value === 'Filial'">
+                class="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 transition"
+                [class.text-[#6b2b1f]]="form.get('dadosIniciais.localVistoria')?.value === 'Filial'">
 
                 <input
                   type="radio"
                   formControlName="localVistoria"
                   value="Filial"
-                  class="accent-indigo-600" />
+                  class="accent-[#6b2b1f] w-5 h-5" />
 
-                <span class="text-sm text-gray-800">Filial</span>
+                <span class="text-sm font-bold">Filial</span>
               </label>
 
-              <!-- MATRIZ -->
               <label
-                class="flex items-center gap-2 cursor-pointer
-                      border rounded-md px-4 py-2
-                      hover:border-gray-500
-                      transition"
-                [class.border-indigo-600]="form.get('dadosIniciais.localVistoria')?.value === 'Matriz'">
+                class="flex items-center gap-2 cursor-pointer p-2 rounded-lg hover:bg-gray-100 transition"
+                [class.text-[#6b2b1f]]="form.get('dadosIniciais.localVistoria')?.value === 'Matriz'">
 
                 <input
                   type="radio"
                   formControlName="localVistoria"
                   value="Matriz"
-                  class="accent-indigo-600" />
+                  class="accent-[#6b2b1f] w-5 h-5" />
 
-                <span class="text-sm text-gray-800">Matriz</span>
+                <span class="text-sm font-bold">Matriz</span>
               </label>
 
             </div>
 
-            <!-- ERRO -->
             <div
               *ngIf="
                 form.get('dadosIniciais.localVistoria')?.touched &&
                 form.get('dadosIniciais.localVistoria')?.invalid
               "
-              class="text-xs text-red-600 mt-1">
+              class="text-xs text-red-600 font-bold mt-1">
               Campo obrigatório.
             </div>
           </div>
 
-
-
-
-            <!-- Nº Ordem -->
             <div>
-              <label for="numeroOrdem" class="block text-sm font-medium text-gray-700 mb-1">Nº Ordem (Opcional)</label>
+              <label for="numeroOrdem" class="block text-xs font-bold uppercase text-gray-500 mb-1">Pré-Ordem(s)</label>
               <input type="text" id="numeroOrdem" formControlName="numeroOrdem"
-                    class="block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    class="block w-full px-4 py-3 border border-gray-200 bg-gray-100 rounded-lg shadow-sm font-bold text-gray-600 cursor-not-allowed" readonly>
             </div>
 
-            <!-- Transportadora -->
             <div>
-              <label for="transportadora" class="block text-sm font-medium text-gray-700 mb-1">Transportadora</label>
-              <input type="text" id="transportadora" formControlName="transportadora"
-                    class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    [class.border-red-500]="form.controls.dadosIniciais.controls.transportadora.invalid && form.controls.dadosIniciais.controls.transportadora.touched"
-                    [class.border-gray-300]="form.controls.dadosIniciais.controls.transportadora.valid || form.controls.dadosIniciais.controls.transportadora.untouched">
+              <label for="transportadora" class="block text-xs font-bold uppercase text-gray-500 mb-1">Transportadora</label>
+              <textarea id="transportadora" formControlName="transportadora" rows="2"
+                    class="block w-full px-4 py-3 border border-gray-200 bg-gray-100 rounded-lg shadow-sm font-bold text-gray-600 cursor-not-allowed resize-none" 
+                    readonly
+                    [class.border-red-500]="form.controls.dadosIniciais.controls.transportadora.invalid && form.controls.dadosIniciais.controls.transportadora.touched"></textarea>
               @if (form.controls.dadosIniciais.controls.transportadora.invalid && form.controls.dadosIniciais.controls.transportadora.touched) {
-                <p class="mt-1 text-xs text-red-600">O nome da transportadora é obrigatório.</p>
+                <p class="mt-1 text-xs text-red-600 font-bold">O nome da transportadora é obrigatório.</p>
               }
             </div>
 
-            <!-- Operação -->
-            <fieldset>
-              <legend class="block text-sm font-medium text-gray-700 mb-2">Operação</legend>
-              <div class="flex items-center gap-x-6">
+            <div>
+              <label for="produto" class="block text-xs font-bold uppercase text-gray-500 mb-1">Produto (Automático)</label>
+              <textarea id="produto" formControlName="produto" rows="3"
+                    class="block w-full px-4 py-3 border border-gray-200 bg-gray-100 rounded-lg shadow-sm font-black text-[#6b2b1f] cursor-not-allowed resize-none" 
+                    readonly
+                    [class.border-red-500]="form.controls.dadosIniciais.controls.produto.invalid && form.controls.dadosIniciais.controls.produto.touched"></textarea>
+              @if (form.controls.dadosIniciais.controls.produto.invalid && form.controls.dadosIniciais.controls.produto.touched) {
+                <p class="mt-1 text-xs text-red-600 font-bold">O nome do produto é obrigatório.</p>
+              }
+            </div>
+ 
+            <fieldset class="p-4 border border-gray-200 rounded-lg">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">Operação</legend>
+              <div class="flex items-center gap-x-6 px-2">
                 <div class="flex items-center">
-                  <input id="carga" value="Carga" type="radio" formControlName="operacao" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                  <label for="carga" class="ml-2 block text-sm text-gray-900">Carga</label>
+                  <input id="carga" value="Carga" type="radio" formControlName="operacao" class="accent-[#6b2b1f] h-5 w-5">
+                  <label for="carga" class="ml-2 block text-sm font-bold text-gray-700">Carga</label>
                 </div>
                 <div class="flex items-center">
-                  <input id="descarga" value="Descarga" type="radio" formControlName="operacao" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                  <label for="descarga" class="ml-2 block text-sm text-gray-900">Descarga</label>
+                  <input id="descarga" value="Descarga" type="radio" formControlName="operacao" class="accent-[#6b2b1f] h-5 w-5">
+                  <label for="descarga" class="ml-2 block text-sm font-bold text-gray-700">Descarga</label>
                 </div>
               </div>
               @if (form.controls.dadosIniciais.controls.operacao.invalid && form.controls.dadosIniciais.controls.operacao.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione o tipo de operação.</p>
+                <p class="mt-1 text-xs text-red-600 font-bold px-2">Selecione o tipo de operação.</p>
               }
             </fieldset>
 
-            <!-- Produto -->
             <div>
-              <label for="produto" class="block text-sm font-medium text-gray-700 mb-1">Produto</label>
-              <input type="text" id="produto" formControlName="produto"
-                    class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    [class.border-red-500]="form.controls.dadosIniciais.controls.produto.invalid && form.controls.dadosIniciais.controls.produto.touched"
-                    [class.border-gray-300]="form.controls.dadosIniciais.controls.produto.valid || form.controls.dadosIniciais.controls.produto.untouched">
-              @if (form.controls.dadosIniciais.controls.produto.invalid && form.controls.dadosIniciais.controls.produto.touched) {
-                <p class="mt-1 text-xs text-red-600">O nome do produto é obrigatório.</p>
-              }
-            </div>
-
-            <!-- Últimos Produtos -->
-            <div>
-              <label for="ultimosProdutos" class="block text-sm font-medium text-gray-700 mb-1">Três últimos produtos transportados</label>
+              <label for="ultimosProdutos" class="block text-xs font-bold uppercase text-gray-500 mb-1">Três últimos produtos transportados</label>
               <textarea id="ultimosProdutos" formControlName="ultimosProdutos" rows="3"
-                        class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        [class.border-red-500]="form.controls.dadosIniciais.controls.ultimosProdutos.invalid && form.controls.dadosIniciais.controls.ultimosProdutos.touched"
-                        [class.border-gray-300]="form.controls.dadosIniciais.controls.ultimosProdutos.valid || form.controls.dadosIniciais.controls.ultimosProdutos.untouched"></textarea>
+                        class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] outline-none"
+                        [class.border-red-500]="form.controls.dadosIniciais.controls.ultimosProdutos.invalid && form.controls.dadosIniciais.controls.ultimosProdutos.touched"></textarea>
               @if (form.controls.dadosIniciais.controls.ultimosProdutos.invalid && form.controls.dadosIniciais.controls.ultimosProdutos.touched) {
-                <p class="mt-1 text-xs text-red-600">Este campo é obrigatório.</p>
+                <p class="mt-1 text-xs text-red-600 font-bold">Este campo é obrigatório.</p>
               }
             </div>
 
-            <!-- Tipo Veículo -->
             <div>
-              <label for="tipoVeiculo" class="block text-sm font-medium text-gray-700 mb-1">Tipo Veículo</label>
+              <label for="tipoVeiculo" class="block text-xs font-bold uppercase text-gray-500 mb-1">Tipo Veículo</label>
               <select id="tipoVeiculo" formControlName="tipoVeiculo"
-                      class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                      [class.border-red-500]="form.controls.dadosIniciais.controls.tipoVeiculo.invalid && form.controls.dadosIniciais.controls.tipoVeiculo.touched"
-                      [class.border-gray-300]="form.controls.dadosIniciais.controls.tipoVeiculo.valid || form.controls.dadosIniciais.controls.tipoVeiculo.untouched">
+                      class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] outline-none"
+                      [class.border-red-500]="form.controls.dadosIniciais.controls.tipoVeiculo.invalid && form.controls.dadosIniciais.controls.tipoVeiculo.touched">
                 <option value="" disabled>Selecione uma opção</option>
                 @for (veiculo of tiposVeiculo; track veiculo) {
                   <option [value]="veiculo">{{ veiculo }}</option>
                 }
               </select>
               @if (form.controls.dadosIniciais.controls.tipoVeiculo.invalid && form.controls.dadosIniciais.controls.tipoVeiculo.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione um tipo de veículo.</p>
+                <p class="mt-1 text-xs text-red-600 font-bold">Selecione um tipo de veículo.</p>
               }
             </div>
           </div>
         </div>
       }
       @case (2) {
-        <!-- Seção Inspeção Interna -->
         <div formGroupName="inspecaoInterna">
-          <h2 class="text-xl font-semibold text-gray-800 mb-6">Inspeção - Parte Interna Veículo</h2>
-          <div class="space-y-8">
+          <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Inspeção - Parte Interna Veículo</h2>
+          <div class="space-y-6">
 
-            <!-- Pergunta 1: Limpeza -->
-            <fieldset formGroupName="limpeza">
-              <legend class="text-sm font-medium text-gray-900 mb-2">1. Limpeza adequada, ausência de insetos e roedores e/ou vestígios destes?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="limpeza-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="limpeza-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="limpeza-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="limpeza-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="limpeza-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="limpeza-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="limpeza-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="limpeza-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="limpeza" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">1. Limpeza adequada, ausência de insetos e roedores e/ou vestígios destes?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="limpeza-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="limpeza-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="limpeza-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="limpeza-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="limpeza-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="limpeza-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="limpeza-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="limpeza-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.limpeza.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.limpeza.status')?.invalid && form.get('inspecaoInterna.limpeza.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 2: Danos -->
-            <fieldset formGroupName="danos">
-              <legend class="text-sm font-medium text-gray-900 mb-2">2. Não há sinais visíveis de danos (frestas, pregos, lascas e madeiras)?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="danos-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="danos-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="danos-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="danos-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="danos-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="danos-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="danos-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="danos-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="danos" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">2. Não há sinais visíveis de danos (frestas, pregos...)?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="danos-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="danos-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="danos-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="danos-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="danos-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="danos-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="danos-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="danos-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.danos.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.danos.status')?.invalid && form.get('inspecaoInterna.danos.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 3: Umidade -->
-            <fieldset formGroupName="umidade">
-              <legend class="text-sm font-medium text-gray-900 mb-2">3. Sem indícios de umidade, vazamento e/ou mofo?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="umidade-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="umidade-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="umidade-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="umidade-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="umidade-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="umidade-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="umidade-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="umidade-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="umidade" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">3. Sem indícios de umidade, vazamento e/ou mofo?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="umidade-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="umidade-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="umidade-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="umidade-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="umidade-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="umidade-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="umidade-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="umidade-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.umidade.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.umidade.status')?.invalid && form.get('inspecaoInterna.umidade.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 4: Resíduos -->
-            <fieldset formGroupName="residuos">
-              <legend class="text-sm font-medium text-gray-900 mb-2">4. Sem resíduos/sujidades sobre a carroceria e embaixo das tampas laterais?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="residuos-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="residuos-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="residuos-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="residuos-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="residuos-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="residuos-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="residuos-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="residuos-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="residuos" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">4. Sem resíduos/sujidades sobre a carroceria e embaixo das tampas laterais?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="residuos-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="residuos-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="residuos-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="residuos-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="residuos-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="residuos-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="residuos-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="residuos-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.residuos.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.residuos.status')?.invalid && form.get('inspecaoInterna.residuos.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 5: Odores -->
-            <fieldset formGroupName="odores">
-              <legend class="text-sm font-medium text-gray-900 mb-2">5. Ausência de outros produtos e/ou odores destes?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="odores-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="odores-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="odores-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="odores-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="odores-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="odores-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="odores-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="odores-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="odores" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">5. Ausência de outros produtos e/ou odores destes?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="odores-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="odores-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="odores-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="odores-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="odores-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="odores-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="odores-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="odores-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.odores.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.odores.status')?.invalid && form.get('inspecaoInterna.odores.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 6: Bocas Graneleiras -->
-            <fieldset formGroupName="bocasGraneleiras">
-              <legend class="text-sm font-medium text-gray-900 mb-2">6. As "bocas" graneleiras para descarga pelo assoalho estão fechadas e com tampas no mesmo nível do assoalho?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="bocas-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bocas-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="bocas-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bocas-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="bocas-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bocas-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="bocas-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bocas-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="bocasGraneleiras" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">6. As "Bocas" graneleira para descarga pelo assoalho estão fechadas e com tampas no mesmo nivel do assoalho?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="bocas-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="bocas-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="bocas-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="bocas-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="bocas-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="bocas-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="bocas-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="bocas-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.bocasGraneleiras.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.bocasGraneleiras.status')?.invalid && form.get('inspecaoInterna.bocasGraneleiras.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 7: Lonas -->
-            <fieldset formGroupName="lonas">
-              <legend class="text-sm font-medium text-gray-900 mb-2">7. Possui lonas de forração e as mesmas estão limpas?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="lonas-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonas-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="lonas-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonas-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="lonas-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonas-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="lonas-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonas-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="lonas" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">7. Possui lonas de forração e as mesmas estão limpas?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="lonas-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="lonas-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonas-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="lonas-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonas-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="lonas-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonas-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="lonas-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.lonas.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.lonas.status')?.invalid && form.get('inspecaoInterna.lonas.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 8: Chapas MDF -->
-            <fieldset formGroupName="chapasMdf">
-              <legend class="text-sm font-medium text-gray-900 mb-2">8. Possui chapas de MDF de 6mm e lonas para carregamento de complemento e os mesmos estão limpos e em bom estado de conservação?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="chapas-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="chapas-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="chapas-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="chapas-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="chapas-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="chapas-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="chapas-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="chapas-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="chapasMdf" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">8. Possui chapas MDF de 6mm e lonas para carregamento de complemento e os mesmos estão limpos e em bom estado de conservação?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="chapas-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="chapas-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="chapas-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="chapas-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="chapas-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="chapas-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="chapas-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="chapas-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('inspecaoInterna.chapasMdf.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('inspecaoInterna.chapasMdf.status')?.invalid && form.get('inspecaoInterna.chapasMdf.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
@@ -362,150 +449,252 @@
         </div>
       }
       @case (3) {
-        <!-- Seção Proteção Carga -->
         <div formGroupName="protecaoCarga">
-          <h2 class="text-xl font-semibold text-gray-800 mb-6">Proteção Carga</h2>
-          <div class="space-y-8">
+          <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Proteção Carga</h2>
+          <div class="space-y-6">
             
-            <!-- Pergunta 1: Lonas Proteção -->
-            <fieldset formGroupName="lonasProtecao">
-              <legend class="text-sm font-medium text-gray-900 mb-2">1. As lonas estão limpas e adequadas, sem sinais visíveis de danos (rasgos, furos) secas e sem odores?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="lonasProt-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonasProt-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="lonasProt-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonasProt-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="lonasProt-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonasProt-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="lonasProt-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="lonasProt-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="lonasProtecao" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">1. Lonas limpas e adequadas, sem sinais visiveis de danos(rasgos, furos), secas e sem odores ?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="lonasProt-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="lonasProt-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonasProt-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="lonasProt-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonasProt-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="lonasProt-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="lonasProt-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="lonasProt-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('protecaoCarga.lonasProtecao.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('protecaoCarga.lonasProtecao.status')?.invalid && form.get('protecaoCarga.lonasProtecao.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 2: Equipamentos -->
-            <fieldset formGroupName="equipamentos">
-              <legend class="text-sm font-medium text-gray-900 mb-2">2. As cantoneira, cintas, lonas e travas estão em boas condições e quantidade suficiente?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="equip-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="equip-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="equip-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="equip-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="equip-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="equip-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="equip-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="equip-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="equipamentos" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">2. Cantoneiras, cintas e travas em boas condições e quantidade suficiente?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="equip-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="equip-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="equip-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="equip-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="equip-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="equip-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="equip-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="equip-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('protecaoCarga.equipamentos.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('protecaoCarga.equipamentos.status')?.invalid && form.get('protecaoCarga.equipamentos.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
-            <!-- Pergunta 3: Tampas Laterais -->
-            <fieldset formGroupName="tampasLaterais">
-              <legend class="text-sm font-medium text-gray-900 mb-2">3. As tampas laterais e o sistema de vedação estão limpos e em bom estado de conservação?</legend>
-              <div class="flex flex-wrap gap-x-6 gap-y-2">
-                <div class="flex items-center"><input id="tampas-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="tampas-c" class="ml-2 text-sm">Conforme</label></div>
-                <div class="flex items-center"><input id="tampas-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="tampas-nc" class="ml-2 text-sm">Não conforme</label></div>
-                <div class="flex items-center"><input id="tampas-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="tampas-na" class="ml-2 text-sm">Não se aplica</label></div>
-                <div class="flex items-center"><input id="tampas-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="tampas-o" class="ml-2 text-sm">Outro:</label></div>
+            <fieldset formGroupName="tampasLaterais" class="p-4 border border-gray-200 rounded-lg hover:border-[#6b2b1f]/30 transition-colors">
+              <legend class="block text-xs font-bold uppercase text-gray-500 mb-2 px-2">3. Tampas laterais e o sistema de vedação estão limpos e em bom estado de conservação?</legend>
+              <div class="flex flex-wrap gap-x-6 gap-y-2 px-2">
+                <div class="flex items-center">
+                  <input id="tampas-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="tampas-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="tampas-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                  <label for="tampas-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="tampas-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                  <label for="tampas-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                </div>
+                <div class="flex items-center">
+                  <input id="tampas-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                  <label for="tampas-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                </div>
               </div>
               @if (form.get('protecaoCarga.tampasLaterais.status')?.value === 'Outro') {
-                <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                <div class="mt-3 px-2">
+                  <textarea formControlName="outro" rows="2" 
+                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                            placeholder="Por favor, especifique..."></textarea>
+                </div>
               }
               @if (form.get('protecaoCarga.tampasLaterais.status')?.invalid && form.get('protecaoCarga.tampasLaterais.status')?.touched) {
-                <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                <p class="mt-2 px-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
               }
             </fieldset>
 
           </div>
         </div>
       }
-      @case (4) {
-        <!-- Seção Detalhes Específicos do Veículo -->
+     @case (4) {
         <div formGroupName="detalhesVeiculo">
+          
           @if (form.controls.dadosIniciais.controls.tipoVeiculo.value === 'Baú' || form.controls.dadosIniciais.controls.tipoVeiculo.value === 'Container') {
-            <h2 class="text-xl font-semibold text-gray-800 mb-6">Detalhes Específicos do Veículo</h2>
+            <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Detalhes Específicos do Veículo</h2>
           }
           
           <div>
-            <!-- Seção Caminhão Baú -->
             @if (form.controls.dadosIniciais.controls.tipoVeiculo.value === 'Baú') {
-              <div formGroupName="caminhaoBau" class="space-y-8">
-                <h3 class="text-lg font-medium text-gray-700 -mb-4">Se Caminhão Baú</h3>
+              <div formGroupName="caminhaoBau" class="space-y-6 bg-gray-50 p-5 rounded-xl border border-gray-200 mb-6">
+                <h3 class="text-sm font-black uppercase text-gray-700 tracking-wider mb-2 border-b border-gray-300 pb-1">🚛 Exigências para Baú</h3>
         
-                <!-- Pergunta 1: Altura Porta -->
-                <fieldset formGroupName="alturaPorta">
-                  <legend class="text-sm font-medium text-gray-900 mb-2">1. Possuí porta de no mínimo 2,30 mts de altura?</legend>
+                <fieldset formGroupName="alturaPorta" class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                  <legend class="block text-xs font-bold uppercase text-gray-500 mb-2">1. Possuí porta de no mínimo 2,30 mts de altura?</legend>
                   <div class="flex flex-wrap gap-x-6 gap-y-2">
-                    <div class="flex items-center"><input id="bau-altura-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-altura-c" class="ml-2 text-sm">Conforme</label></div>
-                    <div class="flex items-center"><input id="bau-altura-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-altura-nc" class="ml-2 text-sm">Não conforme</label></div>
-                    <div class="flex items-center"><input id="bau-altura-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-altura-na" class="ml-2 text-sm">Não se aplica</label></div>
-                    <div class="flex items-center"><input id="bau-altura-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-altura-o" class="ml-2 text-sm">Outro:</label></div>
+                    <div class="flex items-center">
+                      <input id="bau-altura-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-altura-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-altura-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                      <label for="bau-altura-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-altura-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                      <label for="bau-altura-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-altura-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-altura-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                    </div>
                   </div>
                   @if (form.get('detalhesVeiculo.caminhaoBau.alturaPorta.status')?.value === 'Outro') {
-                    <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                    <div class="mt-3">
+                      <textarea formControlName="outro" rows="2" 
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                                placeholder="Por favor, especifique..."></textarea>
+                    </div>
                   }
                   @if (form.get('detalhesVeiculo.caminhaoBau.alturaPorta.status')?.invalid && form.get('detalhesVeiculo.caminhaoBau.alturaPorta.status')?.touched) {
-                    <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                    <p class="mt-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
                   }
                 </fieldset>
 
-                <!-- Pergunta 2: Largura Porta -->
-                <fieldset formGroupName="larguraPorta">
-                  <legend class="text-sm font-medium text-gray-900 mb-2">2. Abertura da porta é de toda largura do veículo?</legend>
+                <fieldset formGroupName="larguraPorta" class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                  <legend class="block text-xs font-bold uppercase text-gray-500 mb-2">2. Abertura da porta é de toda largura do veículo?</legend>
                   <div class="flex flex-wrap gap-x-6 gap-y-2">
-                    <div class="flex items-center"><input id="bau-largura-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-largura-c" class="ml-2 text-sm">Conforme</label></div>
-                    <div class="flex items-center"><input id="bau-largura-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-largura-nc" class="ml-2 text-sm">Não conforme</label></div>
-                    <div class="flex items-center"><input id="bau-largura-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-largura-na" class="ml-2 text-sm">Não se aplica</label></div>
-                    <div class="flex items-center"><input id="bau-largura-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-largura-o" class="ml-2 text-sm">Outro:</label></div>
+                    <div class="flex items-center">
+                      <input id="bau-largura-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-largura-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-largura-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                      <label for="bau-largura-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-largura-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                      <label for="bau-largura-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-largura-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-largura-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                    </div>
                   </div>
                   @if (form.get('detalhesVeiculo.caminhaoBau.larguraPorta.status')?.value === 'Outro') {
-                    <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                    <div class="mt-3">
+                      <textarea formControlName="outro" rows="2" 
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                                placeholder="Por favor, especifique..."></textarea>
+                    </div>
                   }
                   @if (form.get('detalhesVeiculo.caminhaoBau.larguraPorta.status')?.invalid && form.get('detalhesVeiculo.caminhaoBau.larguraPorta.status')?.touched) {
-                    <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                    <p class="mt-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
                   }
                 </fieldset>
 
-                <!-- Pergunta 3: Assoalho -->
-                <fieldset formGroupName="assoalhoLiso">
-                  <legend class="text-sm font-medium text-gray-900 mb-2">3. O assoalho é liso, e proporciona o trafego de empilhadeira ou paleteira?</legend>
+                <fieldset formGroupName="assoalhoLiso" class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                  <legend class="block text-xs font-bold uppercase text-gray-500 mb-2">3. O assoalho é liso, e proporciona o trafego de empilhadeira ou paleteira?</legend>
                   <div class="flex flex-wrap gap-x-6 gap-y-2">
-                    <div class="flex items-center"><input id="bau-assoalho-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-assoalho-c" class="ml-2 text-sm">Conforme</label></div>
-                    <div class="flex items-center"><input id="bau-assoalho-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-assoalho-nc" class="ml-2 text-sm">Não conforme</label></div>
-                    <div class="flex items-center"><input id="bau-assoalho-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-assoalho-na" class="ml-2 text-sm">Não se aplica</label></div>
-                    <div class="flex items-center"><input id="bau-assoalho-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="bau-assoalho-o" class="ml-2 text-sm">Outro:</label></div>
+                    <div class="flex items-center">
+                      <input id="bau-assoalho-c" value="Conforme" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-assoalho-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-assoalho-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                      <label for="bau-assoalho-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-assoalho-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                      <label for="bau-assoalho-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="bau-assoalho-o" value="Outro" type="radio" formControlName="status" class="accent-[#6b2b1f] h-4 w-4">
+                      <label for="bau-assoalho-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                    </div>
                   </div>
                   @if (form.get('detalhesVeiculo.caminhaoBau.assoalhoLiso.status')?.value === 'Outro') {
-                    <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                    <div class="mt-3">
+                      <textarea formControlName="outro" rows="2" 
+                                class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none text-sm" 
+                                placeholder="Por favor, especifique..."></textarea>
+                    </div>
                   }
                   @if (form.get('detalhesVeiculo.caminhaoBau.assoalhoLiso.status')?.invalid && form.get('detalhesVeiculo.caminhaoBau.assoalhoLiso.status')?.touched) {
-                    <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                    <p class="mt-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
                   }
                 </fieldset>
               </div>
             }
 
-            <!-- Seção Container -->
             @if (form.controls.dadosIniciais.controls.tipoVeiculo.value === 'Container') {
-              <div formGroupName="container" class="space-y-8">
-                <h3 class="text-lg font-medium text-gray-700 -mb-4">Se Container</h3>
+              <div formGroupName="container" class="space-y-6 bg-blue-50 p-5 rounded-xl border border-blue-100 mb-6">
+                <h3 class="text-sm font-black uppercase text-blue-800 tracking-wider mb-2 border-b border-blue-200 pb-1">🚢 Exigências para Container</h3>
         
-                <!-- Pergunta 1: Verificação Peso -->
-                <fieldset formGroupName="verificacaoPeso">
-                  <legend class="text-sm font-medium text-gray-900 mb-2">1. Verificar o peso da tara do container e o peso bruto permitido (descrito na porta do container/repassar informação ao faturamento)</legend>
+                <fieldset formGroupName="verificacaoPeso" class="bg-white p-4 rounded-lg border border-blue-100 shadow-sm">
+                  <legend class="block text-xs font-bold uppercase text-gray-500 mb-2">1. Verificar o peso da tara do container e o peso bruto permitido (descrito na porta do container/repassar informação ao faturamento)</legend>
                   <div class="flex flex-wrap gap-x-6 gap-y-2">
-                    <div class="flex items-center"><input id="cont-peso-c" value="Conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="cont-peso-c" class="ml-2 text-sm">Conforme</label></div>
-                    <div class="flex items-center"><input id="cont-peso-nc" value="Não conforme" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="cont-peso-nc" class="ml-2 text-sm">Não conforme</label></div>
-                    <div class="flex items-center"><input id="cont-peso-na" value="Não se aplica" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="cont-peso-na" class="ml-2 text-sm">Não se aplica</label></div>
-                    <div class="flex items-center"><input id="cont-peso-o" value="Outro" type="radio" formControlName="status" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600"><label for="cont-peso-o" class="ml-2 text-sm">Outro:</label></div>
+                    <div class="flex items-center">
+                      <input id="cont-peso-c" value="Conforme" type="radio" formControlName="status" class="accent-blue-600 h-4 w-4">
+                      <label for="cont-peso-c" class="ml-2 text-sm font-bold text-gray-700">Conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="cont-peso-nc" value="Não conforme" type="radio" formControlName="status" class="accent-red-600 h-4 w-4">
+                      <label for="cont-peso-nc" class="ml-2 text-sm font-bold text-gray-700">Não conforme</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="cont-peso-na" value="Não se aplica" type="radio" formControlName="status" class="accent-gray-500 h-4 w-4">
+                      <label for="cont-peso-na" class="ml-2 text-sm font-bold text-gray-500">Não se aplica</label>
+                    </div>
+                    <div class="flex items-center">
+                      <input id="cont-peso-o" value="Outro" type="radio" formControlName="status" class="accent-blue-600 h-4 w-4">
+                      <label for="cont-peso-o" class="ml-2 text-sm font-bold text-gray-700">Outro:</label>
+                    </div>
                   </div>
                   @if (form.get('detalhesVeiculo.container.verificacaoPeso.status')?.value === 'Outro') {
-                    <div class="mt-2"><textarea formControlName="outro" rows="2" class="block w-full mt-1 border-gray-300 rounded-md shadow-sm" placeholder="Por favor, especifique..."></textarea></div>
+                    <div class="mt-3">
+                      <textarea formControlName="outro" rows="2" 
+                                class="block w-full px-3 py-2 border border-blue-200 rounded-lg shadow-sm focus:border-blue-600 focus:ring-blue-600 outline-none text-sm" 
+                                placeholder="Por favor, especifique..."></textarea>
+                    </div>
                   }
                   @if (form.get('detalhesVeiculo.container.verificacaoPeso.status')?.invalid && form.get('detalhesVeiculo.container.verificacaoPeso.status')?.touched) {
-                    <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p>
+                    <p class="mt-2 text-xs text-red-600 font-bold">Selecione uma opção.</p>
                   }
                 </fieldset>
               </div>
@@ -513,229 +702,253 @@
           </div>
         </div>
 
-        <!-- Seção Fotos da Vistoria -->
         <div class="pt-8 mt-8 border-t border-gray-200" formGroupName="fotosVistoria">
-            <h2 class="text-xl font-semibold text-gray-800 mb-6">Fotos da Vistoria</h2>
+            <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Fotos da Vistoria</h2>
             
-            <!-- Subseção Placas -->
             <div formGroupName="placas">
-                <h3 class="text-lg font-medium text-gray-700 mb-4">Placas do Veículo</h3>
+                <h3 class="text-sm font-black uppercase text-gray-600 mb-4 tracking-wider">Placas do Veículo</h3>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <!-- Placa 1 -->
-                    <div>
-                        <label for="placa1" class="block text-sm font-medium text-gray-700 mb-1">Placa 1 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="text" id="placa1" formControlName="placa1" (input)="formatarPlaca($event, 'placa1')" class="block w-full px-4 py-2 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched" [class.border-gray-300]="!form.get('fotosVistoria.placas.placa1')?.invalid">
-                        @if(form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 1 é obrigatória.</p> }
-
-                        <label for="fotoPlaca1" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 1 <span class="text-red-500 font-semibold">*</span></label>
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <label for="placa1" class="block text-xs font-bold uppercase text-gray-500 mb-1">Placa 1 <span class="text-red-500">*</span></label>
+                        <input type="text" id="placa1" formControlName="placa1" (input)="formatarPlaca($event, 'placa1')" 
+                               class="block w-full px-4 py-2 border rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none font-black text-[#6b2b1f] uppercase text-center"
+                               [class.border-red-500]="form.get('fotosVistoria.placas.placa1')?.invalid && form.get('fotosVistoria.placas.placa1')?.touched">
+                        
+                        <label for="fotoPlaca1" class="mt-3 block cursor-pointer px-4 py-3 bg-white border border-dashed border-[#6b2b1f]/40 text-[#6b2b1f] text-xs font-bold uppercase rounded-lg hover:bg-[#6b2b1f]/5 text-center transition">📸 Foto Placa 1 *</label>
                         <input type="file" id="fotoPlaca1" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca1', placa1Preview)">
-                        @if (placa1Preview()) { <img [src]="placa1Preview()" alt="Prévia Placa 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
-                        @if(form.get('fotosVistoria.placas.fotoPlaca1')?.invalid && form.get('fotosVistoria.placas.fotoPlaca1')?.touched){ <p class="mt-1 text-xs text-red-600">A foto da Placa 1 é obrigatória.</p> }
+                        
+                        @if (placa1Preview()) { 
+                            <div class="mt-3 rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+                                <img [src]="placa1Preview()" alt="Prévia Placa 1" class="w-full h-32 object-cover">
+                            </div>
+                        }
+                        @if(form.get('fotosVistoria.placas.fotoPlaca1')?.invalid && form.get('fotosVistoria.placas.fotoPlaca1')?.touched){ <p class="mt-2 text-xs text-red-600 font-bold text-center">Foto obrigatória.</p> }
                     </div>
-                    <!-- Placa 2 -->
-                    <div>
-                      <label for="placa2" class="block text-sm font-medium text-gray-700 mb-1">Placa 2 <span class="text-red-500 font-semibold">*</span></label>
-                      <input
-  type="text"
-  id="placa2"
-  formControlName="placa2"
-  (input)="formatarPlaca($event, 'placa2')"
-  class="block w-full px-4 py-2 border rounded-md shadow-sm">
 
-                        @if(form.get('fotosVistoria.placas.placa2')?.invalid && form.get('fotosVistoria.placas.placa2')?.touched){ <p class="mt-1 text-xs text-red-600">A Placa 2 é obrigatória.</p> }
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                      <label for="placa2" class="block text-xs font-bold uppercase text-gray-500 mb-1">Placa 2 <span class="text-red-500">*</span></label>
+                      <input type="text" id="placa2" formControlName="placa2" (input)="formatarPlaca($event, 'placa2')" 
+                             class="block w-full px-4 py-2 border rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none font-bold uppercase text-center">
 
-                        <label for="fotoPlaca2" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 2 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="file" id="fotoPlaca2"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca2', placa2Preview)">
-                        @if (placa2Preview()) { <img [src]="placa2Preview()" alt="Prévia Placa 2" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
-                        @if(form.get('fotosVistoria.placas.fotoPlaca2')?.invalid && form.get('fotosVistoria.placas.fotoPlaca2')?.touched){ <p class="mt-1 text-xs text-red-600">A foto da Placa 2 é obrigatória.</p> }
+                        <label for="fotoPlaca2" class="mt-3 block cursor-pointer px-4 py-3 bg-white border border-dashed border-[#6b2b1f]/40 text-[#6b2b1f] text-xs font-bold uppercase rounded-lg hover:bg-[#6b2b1f]/5 text-center transition">📸 Foto Placa 2 *</label>
+                        <input type="file" id="fotoPlaca2" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca2', placa2Preview)">
+                        
+                        @if (placa2Preview()) { 
+                            <div class="mt-3 rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+                                <img [src]="placa2Preview()" alt="Prévia Placa 2" class="w-full h-32 object-cover">
+                            </div>
+                        }
                     </div>
-                    <!-- Placa 3 (Opcional) -->
-                    <div>
-<label for="placa3" class="block text-sm font-medium text-gray-700 mb-1">
-        Placa 3 (Opcional)
-    </label>
-    <input
-  type="text"
-  id="placa3"
-  formControlName="placa3"
-  (input)="formatarPlaca($event, 'placa3')"
-  class="block w-full px-4 py-2 border rounded-md shadow-sm">
 
-                        <label for="fotoPlaca3" class="mt-4 inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Selecionar Foto Placa 3</label>
-                        <input type="file" id="fotoPlaca3"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca3', placa3Preview)">
-                        @if (placa3Preview()) { <img [src]="placa3Preview()" alt="Prévia Placa 3" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 opacity-80 hover:opacity-100 transition-opacity">
+                        <label for="placa3" class="block text-xs font-bold uppercase text-gray-500 mb-1">Placa 3 (Opcional)</label>
+                        <input type="text" id="placa3" formControlName="placa3" (input)="formatarPlaca($event, 'placa3')" 
+                               class="block w-full px-4 py-2 border rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none font-bold uppercase text-center">
+
+                        <label for="fotoPlaca3" class="mt-3 block cursor-pointer px-4 py-3 bg-white border border-dashed border-gray-300 text-gray-500 text-xs font-bold uppercase rounded-lg hover:bg-gray-100 text-center transition">📸 Foto Placa 3</label>
+                        <input type="file" id="fotoPlaca3" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.placas.fotoPlaca3', placa3Preview)">
+                        
+                        @if (placa3Preview()) { 
+                            <div class="mt-3 rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+                                <img [src]="placa3Preview()" alt="Prévia Placa 3" class="w-full h-32 object-cover">
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
 
-            <!-- Subseção Interior -->
             <div formGroupName="interiorCarroceria" class="mt-8">
-                <h3 class="text-lg font-medium text-gray-700 mb-4">Interior da Carroceria</h3>
+                <h3 class="text-sm font-black uppercase text-gray-600 mb-4 tracking-wider">Interior da Carroceria</h3>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <!-- Foto Interior 1 -->
-                    <div>
-                        <label for="fotoInterior1" class="inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Foto Interior 1 <span class="text-red-500 font-semibold">*</span></label>
-                        <input type="file" id="fotoInterior1"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior1', interior1Preview)">
-                        @if (interior1Preview()) { <img [src]="interior1Preview()" alt="Prévia Interior 1" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
-                        @if(form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.invalid && form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.touched){ <p class="mt-1 text-xs text-red-600">A Foto 1 do interior é obrigatória.</p> }
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <label for="fotoInterior1" class="block cursor-pointer px-4 py-8 bg-white border-2 border-dashed border-[#6b2b1f]/30 rounded-xl hover:bg-[#6b2b1f]/5 hover:border-[#6b2b1f] text-center transition group">
+                            <span class="text-3xl block mb-2 group-hover:scale-110 transition-transform">📦</span>
+                            <span class="text-xs font-black uppercase text-[#6b2b1f]">Foto Interior 1 *</span>
+                        </label>
+                        <input type="file" id="fotoInterior1" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior1', interior1Preview)">
+                        
+                        @if (interior1Preview()) { 
+                            <div class="mt-3 rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+                                <img [src]="interior1Preview()" alt="Prévia Interior 1" class="w-full h-48 object-cover">
+                            </div>
+                        }
+                        @if(form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.invalid && form.get('fotosVistoria.interiorCarroceria.fotoInterior1')?.touched){ <p class="mt-2 text-xs text-red-600 font-bold text-center">Foto obrigatória.</p> }
                     </div>
-                    <!-- Foto Interior 2 (Opcional) -->
-                    <div>
-                        <label for="fotoInterior2" class="inline-block cursor-pointer px-4 py-2 bg-gray-200 text-gray-800 text-sm font-medium rounded-md hover:bg-gray-300 w-full text-center">Foto Interior 2 (Opcional)</label>
-                        <input type="file" id="fotoInterior2"   capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior2', interior2Preview)">
-                        @if (interior2Preview()) { <img [src]="interior2Preview()" alt="Prévia Interior 2" class="mt-2 rounded-md w-full h-auto object-cover max-h-48"> }
+
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                        <label for="fotoInterior2" class="block cursor-pointer px-4 py-8 bg-white border-2 border-dashed border-gray-300 rounded-xl hover:bg-gray-100 hover:border-gray-400 text-center transition group">
+                            <span class="text-3xl block mb-2 group-hover:scale-110 transition-transform">📦</span>
+                            <span class="text-xs font-bold uppercase text-gray-500">Foto Interior 2</span>
+                        </label>
+                        <input type="file" id="fotoInterior2" capture="environment" class="hidden" accept="image/*" (change)="onFileChange($event, 'fotosVistoria.interiorCarroceria.fotoInterior2', interior2Preview)">
+                        
+                        @if (interior2Preview()) { 
+                            <div class="mt-3 rounded-lg overflow-hidden border border-gray-300 shadow-sm">
+                                <img [src]="interior2Preview()" alt="Prévia Interior 2" class="w-full h-48 object-cover">
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
         </div>
       }
       @case (5) {
-        <!-- Seção Finalização e Assinaturas -->
-<div formGroupName="finalizacao">
-    <h2 class="text-xl font-semibold text-gray-800 mb-6">Finalização e Assinaturas</h2>
+        <div formGroupName="finalizacao">
+            <h2 class="text-xl font-black text-[#6b2b1f] uppercase mb-6 border-b pb-2">Finalização e Assinaturas</h2>
 
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
 
-        <!-- MOTORISTA -->
-        <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">
-                Nome Motorista <span class="text-red-500">*</span>
-            </label>
-            <input type="text"
-                id="motoristaNome"
-                formControlName="motoristaNome"
-                class="block w-full px-4 py-2 border rounded-md shadow-sm"
-                [class.border-red-500]="form.get('finalizacao.motoristaNome')?.invalid &&
-                                        form.get('finalizacao.motoristaNome')?.touched">
-
-            <label class="block text-sm font-medium text-gray-700 pt-2">
-                Assinatura Motorista <span class="text-red-500">*</span>
-            </label>
-
-            @if(!form.get('finalizacao.motoristaAssinatura')?.value) {
-                <button type="button"
-                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
-                    (click)="openSignatureFullscreen('motorista')">Assinar Motorista</button>
-            }
-
-            @if(form.get('finalizacao.motoristaAssinatura')?.value) {
-                <div class="relative">
-                    <canvas #motoristaCanvas
-                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
-
-                    <button type="button"
-                        (click)="openSignatureFullscreen('motorista')"
-                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
-                               text-gray-700 px-2 py-1 rounded">
-                        Reassinar
-                    </button>
-                </div>
-            }
-
-            @if(form.get('finalizacao.motoristaAssinatura')?.invalid &&
-                form.get('finalizacao.motoristaAssinatura')?.touched) {
-                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
-            }
-        </div>
-
-        <!-- VISTORIADOR -->
-        <div class="space-y-2">
-            <label class="block text-sm font-medium text-gray-700">
-                Nome Vistoriador/Qualidade <span class="text-red-500">*</span>
-            </label>
-            <input type="text"
-                id="vistoriadorNome"
-                formControlName="vistoriadorNome"
-                class="block w-full px-4 py-2 border rounded-md shadow-sm"
-                [class.border-red-500]="form.get('finalizacao.vistoriadorNome')?.invalid &&
-                                        form.get('finalizacao.vistoriadorNome')?.touched">
-
-            <label class="block text-sm font-medium text-gray-700 pt-2">
-                Assinatura Vistoriador <span class="text-red-500">*</span>
-            </label>
-
-            @if(!form.get('finalizacao.vistoriadorAssinatura')?.value) {
-                <button type="button"
-                    class="w-full bg-blue-600 text-white py-2 rounded shadow hover:bg-blue-700"
-                    (click)="openSignatureFullscreen('vistoriador')">Assinar Vistoriador</button>
-            }
-
-            @if(form.get('finalizacao.vistoriadorAssinatura')?.value) {
-                <div class="relative">
-                    <canvas #vistoriadorCanvas
-                        class="border rounded-md w-full h-32 bg-gray-50 touch-none"></canvas>
-
-                    <button type="button"
-                        (click)="openSignatureFullscreen('vistoriador')"
-                        class="absolute top-1 right-1 text-xs bg-gray-200 hover:bg-gray-300
-                               text-gray-700 px-2 py-1 rounded">
-                        Reassinar
-                    </button>
-                </div>
-            }
-
-            @if(form.get('finalizacao.vistoriadorAssinatura')?.invalid &&
-                form.get('finalizacao.vistoriadorAssinatura')?.touched) {
-                <p class="text-xs text-red-600">A assinatura é obrigatória.</p>
-            }
-        </div>
-
-    </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
-                <!-- Caminhão Liberado? -->
-                <fieldset>
-                    <legend class="block text-sm font-medium text-gray-700 mb-2">Caminhão Liberado? <span class="text-red-500">*</span></legend>
-                    <div class="flex items-center gap-x-6">
-                        <div class="flex items-center">
-                        <input id="liberado-sim" value="Sim" type="radio" formControlName="caminhaoLiberado" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                        <label for="liberado-sim" class="ml-2 block text-sm text-gray-900">Sim</label>
-                        </div>
-                        <div class="flex items-center">
-                        <input id="liberado-nao" value="Não" type="radio" formControlName="caminhaoLiberado" class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-600">
-                        <label for="liberado-nao" class="ml-2 block text-sm text-gray-900">Não</label>
-                        </div>
+                <div class="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-200">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1">
+                            Nome Motorista <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text"
+                            id="motoristaNome"
+                            formControlName="motoristaNome"
+                            class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none font-bold text-gray-700"
+                            [class.border-red-500]="form.get('finalizacao.motoristaNome')?.invalid &&
+                                                    form.get('finalizacao.motoristaNome')?.touched">
                     </div>
-                    @if(form.get('finalizacao.caminhaoLiberado')?.invalid && form.get('finalizacao.caminhaoLiberado')?.touched) { <p class="mt-1 text-xs text-red-600">Selecione uma opção.</p> }
-                </fieldset>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">
+                            Assinatura Motorista <span class="text-red-500">*</span>
+                        </label>
+
+                        @if(!form.get('finalizacao.motoristaAssinatura')?.value) {
+                            <button type="button"
+                                class="w-full h-32 bg-white border-2 border-dashed border-[#6b2b1f]/30 text-[#6b2b1f] rounded-xl shadow-sm hover:bg-[#6b2b1f]/5 transition-colors flex flex-col items-center justify-center group"
+                                (click)="openSignatureFullscreen('motorista')">
+                                <span class="text-3xl mb-1 group-hover:scale-110 transition-transform">✍️</span>
+                                <span class="text-xs font-black uppercase tracking-wider">Toque para Assinar</span>
+                            </button>
+                        }
+
+                        @if(form.get('finalizacao.motoristaAssinatura')?.value) {
+                            <div class="relative group">
+                                <canvas #motoristaCanvas
+                                    class="border border-gray-300 rounded-lg w-full h-32 bg-white touch-none shadow-sm"></canvas>
+
+                                <button type="button"
+                                    (click)="openSignatureFullscreen('motorista')"
+                                    class="absolute top-2 right-2 text-[10px] font-bold uppercase bg-gray-100 hover:bg-gray-200
+                                           text-gray-600 px-3 py-1.5 rounded-lg border border-gray-300 shadow-sm transition-colors">
+                                    Refazer
+                                </button>
+                            </div>
+                        }
+
+                        @if(form.get('finalizacao.motoristaAssinatura')?.invalid &&
+                            form.get('finalizacao.motoristaAssinatura')?.touched) {
+                            <p class="text-xs text-red-600 font-bold mt-1">A assinatura é obrigatória.</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-200">
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-1">
+                            Nome Vistoriador <span class="text-red-500">*</span>
+                        </label>
+                        <input type="text"
+                            id="vistoriadorNome"
+                            formControlName="vistoriadorNome"
+                            class="block w-full px-4 py-3 border border-gray-300 rounded-lg shadow-sm focus:border-[#6b2b1f] focus:ring-[#6b2b1f] outline-none font-bold text-gray-700"
+                            [class.border-red-500]="form.get('finalizacao.vistoriadorNome')?.invalid &&
+                                                    form.get('finalizacao.vistoriadorNome')?.touched">
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase text-gray-500 mb-2">
+                            Assinatura Vistoriador <span class="text-red-500">*</span>
+                        </label>
+
+                        @if(!form.get('finalizacao.vistoriadorAssinatura')?.value) {
+                            <button type="button"
+                                class="w-full h-32 bg-white border-2 border-dashed border-gray-400 text-gray-500 rounded-xl shadow-sm hover:bg-gray-100 transition-colors flex flex-col items-center justify-center group"
+                                (click)="openSignatureFullscreen('vistoriador')">
+                                <span class="text-3xl mb-1 group-hover:scale-110 transition-transform">📝</span>
+                                <span class="text-xs font-black uppercase tracking-wider">Toque para Assinar</span>
+                            </button>
+                        }
+
+                        @if(form.get('finalizacao.vistoriadorAssinatura')?.value) {
+                            <div class="relative group">
+                                <canvas #vistoriadorCanvas
+                                    class="border border-gray-300 rounded-lg w-full h-32 bg-white touch-none shadow-sm"></canvas>
+
+                                <button type="button"
+                                    (click)="openSignatureFullscreen('vistoriador')"
+                                    class="absolute top-2 right-2 text-[10px] font-bold uppercase bg-gray-100 hover:bg-gray-200
+                                           text-gray-600 px-3 py-1.5 rounded-lg border border-gray-300 shadow-sm transition-colors">
+                                    Refazer
+                                </button>
+                            </div>
+                        }
+
+                        @if(form.get('finalizacao.vistoriadorAssinatura')?.invalid &&
+                            form.get('finalizacao.vistoriadorAssinatura')?.touched) {
+                            <p class="text-xs text-red-600 font-bold mt-1">A assinatura é obrigatória.</p>
+                        }
+                    </div>
+                </div>
+
+            </div>
+            
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <label class="block text-sm font-black uppercase text-[#6b2b1f] mb-3">Conclusão da Vistoria <span class="text-red-500">*</span></label>
+                
+                <div class="flex gap-4">
+                    <label class="flex-1 flex items-center gap-2 cursor-pointer p-4 border rounded-xl hover:bg-green-50 has-[:checked]:border-green-500 has-[:checked]:bg-green-50 transition-all justify-center shadow-sm">
+                        <input id="liberado-sim" value="Sim" type="radio" formControlName="caminhaoLiberado" class="accent-green-600 w-5 h-5">
+                        <span class="font-black text-green-700 uppercase text-xs tracking-wider">Liberado</span>
+                    </label>
+                    <label class="flex-1 flex items-center gap-2 cursor-pointer p-4 border rounded-xl hover:bg-red-50 has-[:checked]:border-red-500 has-[:checked]:bg-red-50 transition-all justify-center shadow-sm">
+                        <input id="liberado-nao" value="Não" type="radio" formControlName="caminhaoLiberado" class="accent-red-600 w-5 h-5">
+                        <span class="font-black text-red-700 uppercase text-xs tracking-wider">Reprovado</span>
+                    </label>
+                </div>
+                @if(form.get('finalizacao.caminhaoLiberado')?.invalid && form.get('finalizacao.caminhaoLiberado')?.touched) { 
+                    <p class="mt-2 text-xs text-red-600 font-bold">Selecione uma opção.</p> 
+                }
             </div>
 
-            <!-- Observações -->
-            <div class="mt-8">
-                <label for="observacoes" class="block text-sm font-medium text-gray-700 mb-1">Observações</label>
-                <textarea id="observacoes" formControlName="observacoes" rows="4" class="block w-full px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+            <div class="mt-6">
+                <label for="observacoes" class="block text-xs font-bold uppercase text-gray-500 mb-1">Observações Gerais</label>
+                <textarea id="observacoes" formControlName="observacoes" rows="4" 
+                          class="block w-full px-4 py-3 border border-gray-300 rounded-xl shadow-sm focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] outline-none text-sm" 
+                          placeholder="Digite observações adicionais..."></textarea>
             </div>
        </div>
       }
     }
 
 
-    <!-- Navigation Buttons -->
-    <div class="mt-8 pt-5 border-t border-gray-200 flex justify-between items-center">
+    <div class="mt-8 pt-6 border-t border-gray-200 flex justify-between items-center">
       <button type="button" (click)="previousStep()"
               [class.invisible]="currentStep() === 1"
-              class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-        Anterior
+              class="px-6 py-3 border border-gray-300 shadow-sm text-xs font-bold uppercase rounded-xl text-gray-600 bg-white hover:bg-gray-50 transition-colors">
+        Voltar
       </button>
       
-      <div> <!-- This div helps keep the buttons on opposite ends -->
+      <div>
         @if (currentStep() < totalSteps) {
             <button type="button" (click)="nextStep()"
-                    class="w-full sm:w-auto inline-flex justify-center py-3 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-              Próximo
+                    class="px-8 py-3 bg-[#6b2b1f] text-white shadow-lg text-xs font-black uppercase tracking-wider rounded-xl hover:bg-[#502017] transition-all transform active:scale-95">
+              Próximo ➜
             </button>
         }
         
         @if (currentStep() === totalSteps) {
           <button type="submit" 
                   [disabled]="form.invalid || isSubmitting()"
-                  class="w-full sm:w-auto inline-flex items-center justify-center py-3 px-6 border border-transparent shadow-sm text-base font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:bg-indigo-300 disabled:cursor-not-allowed">
+                  class="px-8 py-3 bg-green-600 text-white shadow-lg text-xs font-black uppercase tracking-wider rounded-xl hover:bg-green-700 transition-all transform active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed">
             @if(isSubmitting()) {
-              <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Enviando...</span>
+              <span class="flex items-center gap-2">
+                  <div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Enviando...
+              </span>
             } @else {
               <span>Finalizar Vistoria</span>
             }
@@ -747,35 +960,52 @@
   </form>
 
 <!-- FULLSCREEN SIGNATURE MODAL -->
-<div id="signatureFullscreen"
-    class="fixed inset-0 bg-black bg-opacity-60 backdrop-blur-sm hidden 
-           flex-col items-center justify-center z-[9999]">
+<div id="signatureFullscreen" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex-col items-center justify-center z-[9999] p-4 animate-fade-in">
 
-    <div class="bg-white rounded-lg p-4 shadow-xl w-full max-w-2xl">
-        <h2 class="text-lg font-semibold mb-2">Assinatura</h2>
-
-        <canvas #fullscreenSignatureCanvas
-                class="w-full h-64 border rounded-md bg-gray-50 touch-none"></canvas>
-
-        <div class="flex justify-between mt-4">
-            <button type="button"
-                    class="px-4 py-2 bg-gray-200 rounded"
-                    (click)="closeSignatureFullscreen()">
-                Fechar
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col h-[70vh] sm:h-[80vh] border border-gray-200">
+        
+        <div class="bg-[#6b2b1f] text-white p-4 flex justify-between items-center shrink-0 shadow-md">
+            <h2 class="text-sm font-black uppercase tracking-widest flex items-center gap-2">
+                <span>🖊️</span> Assinar na Tela
+            </h2>
+            <button type="button" 
+                    (click)="closeSignatureFullscreen()" 
+                    class="bg-white/10 hover:bg-white/20 text-white rounded-full w-8 h-8 flex items-center justify-center transition-colors">
+                ✕
             </button>
+        </div>
+
+        <div class="flex-grow bg-gray-50 relative touch-none w-full shadow-inner">
+             <canvas #fullscreenSignatureCanvas class="absolute inset-0 w-full h-full cursor-crosshair"></canvas>
+             
+             <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-10">
+                <p class="text-5xl font-black text-gray-500 uppercase transform -rotate-12">Assine Aqui</p>
+             </div>
+        </div>
+
+        <div class="p-4 bg-white border-t border-gray-200 flex flex-col sm:flex-row justify-between gap-3 shrink-0">
+             
              <button type="button"
-                     class="px-4 py-2 bg-yellow-500 text-white rounded"
-                     (click)="clearSignature()">
-                Limpar
+                     class="px-6 py-3 bg-white border border-gray-300 text-gray-600 rounded-xl font-bold uppercase text-xs hover:bg-gray-50 transition-colors shadow-sm"
+                     (click)="closeSignatureFullscreen()">
+                Cancelar
              </button>
 
-            <button type="button"
-                    class="px-4 py-2 bg-blue-600 text-white rounded"
-                    (click)="saveSignature()">
-                Salvar Assinatura
-            </button>
+             <div class="flex gap-3 w-full sm:w-auto">
+                 <button type="button"
+                         class="flex-1 sm:flex-none px-6 py-3 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-xl font-bold uppercase text-xs hover:bg-yellow-100 transition-colors shadow-sm"
+                         (click)="clearSignature()">
+                    Limpar
+                 </button>
+
+                 <button type="button"
+                         class="flex-1 sm:flex-none px-8 py-3 bg-[#6b2b1f] text-white rounded-xl font-black uppercase text-xs shadow-lg hover:bg-[#502017] transition-all transform active:scale-95 flex items-center justify-center gap-2"
+                         (click)="saveSignature()">
+                     Salvar Assinatura
+                 </button>
+             </div>
         </div>
     </div>
 </div>
 
-</div>
+</div> 
