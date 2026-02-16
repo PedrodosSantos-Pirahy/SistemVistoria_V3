@@ -1,5 +1,7 @@
 <div class="p-4 space-y-6 font-sans text-[#4a342d] max-w-5xl mx-auto">
 
+ <div class="p-4 space-y-6 font-sans text-[#4a342d] max-w-5xl mx-auto">
+
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
       <h2 class="text-2xl font-black uppercase tracking-tight text-[#6b2b1f]">Histórico</h2>
@@ -11,40 +13,60 @@
     </div>
   </div>
 
+  <div class="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-2 rounded-2xl border border-[#eadfce] shadow-sm">
+    <div class="bg-gray-100 p-1 rounded-xl flex h-10 min-w-[280px] w-full md:w-auto shadow-inner">
+      <button (click)="setLocal('Qualquer')"
+              [class.bg-white]="tipoLocal() === 'Qualquer'"
+              [class.text-[#6b2b1f]]="tipoLocal() === 'Qualquer'"
+              [class.shadow-sm]="tipoLocal() === 'Qualquer'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-lg text-[10px] font-black uppercase transition-all duration-200 text-gray-500">
+        Todas
+      </button>
+      <button (click)="setLocal('Matriz')"
+              [class.bg-white]="tipoLocal() === 'Matriz'"
+              [class.text-[#6b2b1f]]="tipoLocal() === 'Matriz'"
+              [class.shadow-sm]="tipoLocal() === 'Matriz'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-lg text-[10px] font-black uppercase transition-all duration-200 text-gray-500">
+        Matriz
+      </button>
+      <button (click)="setLocal('Filial')"
+              [class.bg-white]="tipoLocal() === 'Filial'"
+              [class.text-[#6b2b1f]]="tipoLocal() === 'Filial'"
+              [class.shadow-sm]="tipoLocal() === 'Filial'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-lg text-[10px] font-black uppercase transition-all duration-200 text-gray-500">
+        Filial
+      </button>
+    </div>
+
+    <div class="text-[10px] font-bold text-gray-400 uppercase pr-2">
+        Unidade: <span class="text-[#6b2b1f]">{{ tipoLocal() }}</span>
+    </div>
+  </div>
+
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-white p-4 rounded-2xl shadow-sm border border-[#eadfce]">
-    
     <div>
         <label class="text-[10px] font-bold uppercase text-gray-400 pl-1">Buscar Placa</label>
-        <div class="flex gap-2">
-            <input
-            type="text"
-            placeholder="AAA-1234"
-            class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-lg font-black uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] transition-all placeholder:text-gray-300"
-            maxlength="8" 
-            [value]="buscaPlaca()"
-            (input)="formatarPlacaInput($any($event.target).value)" 
-            (keyup.enter)="aoPesquisar()" />
-        </div>
+        <input type="text" placeholder="AAA-1234"
+               class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-lg font-black uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] transition-all placeholder:text-gray-300"
+               maxlength="8" [value]="buscaPlaca()"
+               (input)="formatarPlacaInput($any($event.target).value)" 
+               (keyup.enter)="aoPesquisar()" />
     </div>
 
     <div>
         <label class="text-[10px] font-bold uppercase text-gray-400 pl-1">Buscar Transportadora</label>
         <div class="flex gap-2">
-            <input
-            type="text"
-            placeholder="Nome da Transportadora..."
-            class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-bold uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] focus:ring-1 focus:ring-[#6b2b1f] transition-all placeholder:text-gray-300 h-[54px]"
-            [value]="buscaTransp()"
-            (input)="buscaTransp.set($any($event.target).value)"
-            (keyup.enter)="aoPesquisar()" />
-            
-            <button (click)="aoPesquisar()" class="bg-[#6b2b1f] text-white px-4 rounded-xl font-bold uppercase text-sm shadow-md hover:bg-[#5a241a] transition-colors">
+            <input type="text" placeholder="Nome da Transportadora..."
+                   class="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm font-bold uppercase text-gray-700 focus:outline-none focus:border-[#6b2b1f] transition-all h-[54px]"
+                   [value]="buscaTransp()"
+                   (input)="buscaTransp.set($any($event.target).value)"
+                   (keyup.enter)="aoPesquisar()" />
+            <button (click)="aoPesquisar()" class="bg-[#6b2b1f] text-white px-4 rounded-xl font-bold shadow-md hover:bg-[#5a241a] transition-colors">
                 🔍
             </button>
         </div>
     </div>
   </div>
-
   <div *ngIf="carregando()" class="py-12 text-center">
     <div class="animate-spin rounded-full h-10 w-10 border-b-4 border-[#6b2b1f] mx-auto mb-3"></div>
     <p class="text-gray-400 font-bold text-xs uppercase tracking-widest">Buscando...</p>

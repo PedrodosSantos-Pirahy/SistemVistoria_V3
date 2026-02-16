@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
+import { ApiService } from '../../services/app.service';
 
 // Interface para o retorno do backend
 interface IntervaloOcupado {
@@ -17,6 +18,8 @@ interface IntervaloOcupado {
   templateUrl: './agendamento.component.html'
 })
 export class AgendamentoComponent {
+
+  private apiService: ApiService = inject(ApiService);
   private http: HttpClient = inject(HttpClient);
   private router: Router = inject(Router);
   readonly minDate = new Date().toISOString().split('T')[0];
@@ -45,26 +48,21 @@ export class AgendamentoComponent {
     // Sempre que 'selectedDate' mudar, busca os agendamentos do banco.
     effect(() => {
       const data = this.selectedDate();
-      if (data) {
-        this.carregarOcupacoes(data);
-      }
+      const local = this.selectedLocal();
+      if (data && local) {
+      this.carregarOcupacoes(data, local);
+    }
     });
   }
 
   // --- BUSCA DADOS NO BACKEND ---
-  carregarOcupacoes(data: string) {
-    // Reseta hora selecionada ao mudar de dia para evitar conflitos visuais
-    this.horaSelecionada.set(null);
-    
-    // Chama o endpoint novo que filtra os cancelados
-    this.http.get<IntervaloOcupado[]>(`http://192.168.53.193:5002/agendamentos-dia?data=${data}`)
-      .subscribe({
-        next: (dados) => {
-          this.ocupacoesDoDia.set(dados);
-        },
-        error: (err) => console.error('Erro ao buscar ocupação', err)
-      });
-  }
+carregarOcupacoes(data: string, local: string) {
+  this.horaSelecionada.set(null);
+  this.apiService.getAgendamentosDia(data, local).subscribe({
+      next: (dados) => this.ocupacoesDoDia.set(dados),
+      error: (err) => console.error('Erro ao buscar ocupação', err)
+  });
+}
 
   // --- HELPERS DE TEMPO ---
   private timeToMinutes(time: string): number {
@@ -161,13 +159,13 @@ export class AgendamentoComponent {
     }
   }
 
-  buscarTransportadora(placa: string) {
+buscarTransportadora(placa: string) {
     this.isSearchingPlaca.set(true);
     this.placaError.set(null);
     const placaEnvio = placa.replace('-', '');
 
-    this.http.get<{ transportadora: string }>(`http://192.168.53.193:5000/consultar-placa/${placaEnvio}`)
-      .subscribe({
+    // Antes: http.get(`http://192...`)
+    this.apiService.consultarPlaca(placaEnvio).subscribe({
         next: (res) => {
           this.transportadora.set(res.transportadora);
           this.isSearchingPlaca.set(false);
@@ -179,7 +177,6 @@ export class AgendamentoComponent {
         }
       });
   }
-
   addPreOrdem() { 
     if (this.preordens().length >= 5) {
       alert('⚠️ Máximo de 5 ordens permitido.');
@@ -220,30 +217,33 @@ export class AgendamentoComponent {
     
     // Validação de Lotação (Front)
     const slotSelecionado = this.slots().find(s => s.time === this.horaSelecionada());
-    if (slotSelecionado && slotSelecionado.load >= 3) {
-      alert('Este horário acabou de lotar. Por favor, escolha outro.');
-      this.carregarOcupacoes(this.selectedDate());
-      return;
-    }
+ // Dentro de confirmarAgendamento() no agendamento.component.ts
+if (slotSelecionado && slotSelecionado.load >= 3) {
+  alert('Este horário acabou de lotar. Por favor, escolha outro.');
+  
+  // CORREÇÃO: Adicione o local como segundo argumento
+  this.carregarOcupacoes(this.selectedDate(), this.selectedLocal()!); 
+  
+  return;
+}
 
     this.isSubmitting.set(true);
 
     // 🔥 2. VALIDAÇÃO DE DUPLICIDADE LEVE (BACKEND)
     // Verifica: Placa + Data + Ordem1 (Ignora Hora)
+    // ... dentro do confirmarAgendamento ...
     const primeiraOrdem = ordensValidas[0];
     const params = `placa=${this.placa()}&data=${this.selectedDate()}&ordem=${primeiraOrdem}`;
 
-    this.http.get<{ duplicado: boolean }>(`http://192.168.53.193:5002/verificar-duplicidade?${params}`)
-      .subscribe({
+    // SUBSTITUÍDO: Chama o serviço em vez do IP fixo
+    this.apiService.verificarDuplicidade(params).subscribe({
         next: (check) => {
-          
           if (check.duplicado) {
-            alert(`⚠️ ATENÇÃO: Já existe um agendamento para esta PLACA e ORDEM neste DIA!\n\nVerifique se não está duplicando o cadastro.`);
+            alert(`⚠️ ATENÇÃO: Já existe um agendamento para esta PLACA e ORDEM neste DIA!`);
             this.isSubmitting.set(false);
-            return; // ⛔ BLOQUEIA O ENVIO
+            return;
           }
 
-          // --- SE NÃO FOR DUPLICADO, SEGUE O BAILE ---
           const payload = {
             placa: this.placa(),
             transportadora: this.transportadora(),
@@ -255,27 +255,20 @@ export class AgendamentoComponent {
             status: 'Pendente' 
           };
 
-          this.http.post('http://192.168.53.193:5000/criar-agendamento', payload)
-            .subscribe({
+          // SUBSTITUÍDO: Chama o serviço para criar
+          this.apiService.criarAgendamento(payload).subscribe({
               next: (res: any) => {
                 alert('✅ Agendamento realizado com sucesso!');
                 this.isSubmitting.set(false);
                 this.router.navigate(['/monitoramento']); 
               },
               error: (err) => {
-                console.error('Erro ao agendar:', err);
                 alert('❌ Erro ao comunicar com o servidor.');
                 this.isSubmitting.set(false);
               }
             });
-
         },
-        error: () => {
-          console.warn('Falha na verificação de duplicidade, tentando criar mesmo assim...');
-          // Se a verificação falhar (ex: erro de rede no GET leve), 
-          // libera o POST para não travar a operação.
-          this.isSubmitting.set(false); 
-        }
+        error: () => this.isSubmitting.set(false)
       });
   }
 }

@@ -58,7 +58,8 @@ def get_historico():
         per_page = request.args.get('limit', 20, type=int)
         placa_filtro = request.args.get('placa', '').strip().upper()
         transp_filtro = request.args.get('transportadora', '').strip().upper()
-        
+        local_filtro = request.args.get('local', '').strip()
+
         offset = (page - 1) * per_page
 
         conn = psycopg2.connect(**DB_BUSCA)
@@ -67,6 +68,10 @@ def get_historico():
         # 2. Filtros Dinâmicos
         where_parts = ["1=1"]
         params_query = []
+
+        if local_filtro and local_filtro != 'Qualquer':
+            where_parts.append("AND a.local = %s")
+            params_query.append(local_filtro)
 
         if placa_filtro:
             placa_limpa = placa_filtro.replace('-', '')
@@ -187,10 +192,13 @@ def get_pdf(id_agendamento):
 # --- AGENDAMENTOS DIA ---
 # Em historico.a.py
 
+# No ficheiro historico.a.py
 @app.route('/agendamentos-dia', methods=['GET'])
 def get_agendamentos_dia():
     data_str = request.args.get('data') 
-    if not data_str:
+    local_str = request.args.get('local')
+
+    if not data_str or not local_str:
         return jsonify([])
 
     conn = None
@@ -198,11 +206,17 @@ def get_agendamentos_dia():
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
         
-        # 🔥 ALTERAÇÃO: Agora retorna também o ID (a.id)
+        # SQL com 3 parâmetros (%s) para garantir que a data e o local batam sempre
+        # No arquivo historico.a.py
         sql = """
             SELECT a.hr_inicio, a.hr_fim, a.id
             FROM "vistoria"."VAGENDAMENTO" a
-            WHERE a.data = %s 
+            WHERE (
+                CAST(a.data AS DATE) = CAST(%s AS DATE) 
+                OR to_char(a.data, 'YYYY-MM-DD') = %s
+            )
+            -- ✅ CORRIGIDO: TRIM remove espaços extras que podem vir do banco
+            AND UPPER(TRIM(a.local)) = UPPER(TRIM(%s)) 
             AND NOT EXISTS (
                 SELECT 1 
                 FROM "vistoria"."VRESPOSTAS" r 
@@ -210,12 +224,15 @@ def get_agendamentos_dia():
                 AND r.status = 'Cancelada'
             )
         """
-        
-        cur.execute(sql, (data_str,))
+        # Passando os 3 parâmetros corretamente
+        cur.execute(sql, (data_str, data_str, local_str))
+                
+
         rows = cur.fetchall()
         
         ocupacoes = []
         for row in rows:
+            # O row[0] e row[1] são hr_inicio e hr_fim
             inicio = str(row[0])[:5] if row[0] else None
             fim = str(row[1])[:5] if row[1] else None
             id_agend = str(row[2])
@@ -231,7 +248,6 @@ def get_agendamentos_dia():
     finally:
         if conn: conn.close()
 
-
 # --- MONITORAMENTO (COM ORDENAÇÃO UNIFICADA) ---
 # Substitua APENAS a função monitoramento_excel
 
@@ -242,6 +258,9 @@ def monitoramento_excel():
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('limit', 20, type=int)
         busca_raw = request.args.get('q', '').strip()
+        local_filtro = request.args.get('local', '').strip()
+        status_filtro = request.args.get('status', '').strip() # 👈 NOVO PARÂMETRO
+        
         busca = busca_raw.upper()
         offset = (page - 1) * per_page
 
@@ -251,6 +270,17 @@ def monitoramento_excel():
         where_parts = ["1=1"]
         params_query = []
 
+        # Filtro de Local
+        if local_filtro and local_filtro != 'Qualquer':
+            where_parts.append("AND a.local = %s")
+            params_query.append(local_filtro)
+
+        # 👈 NOVO: Filtro de Status (Com ou Sem Resposta)
+        if status_filtro == 'Pendentes':
+            where_parts.append("AND r.status IS NULL")
+        elif status_filtro == 'Realizadas':
+            where_parts.append("AND r.status IS NOT NULL")
+            
         if busca:
             termo = f"%{busca}%"
             condicoes = [

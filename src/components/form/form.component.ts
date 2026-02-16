@@ -1,6 +1,6 @@
 ///ng serve --host 192.168.53.193
 
-import { Component, ChangeDetectionStrategy, signal, OnDestroy, WritableSignal, ViewChild, ElementRef, input, effect, computed, output } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, OnDestroy, WritableSignal, ViewChild, ElementRef, input, effect, computed, output, inject } from '@angular/core';
 import { ReactiveFormsModule, FormGroup, FormControl, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { Router } from '@angular/router';
@@ -8,7 +8,7 @@ import { CommonModule } from '@angular/common';
 import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OfflineStorageService } from '../../storange/offline-storage.service';
 import { FormsModule } from '@angular/forms'; // Importante para ngModel
-
+import { ApiService } from '../../services/app.service';
 
 declare var SignaturePad: any;
 
@@ -30,6 +30,7 @@ interface OrdemTransportadora {
 })
 export class FormComponent implements OnDestroy {
 
+  private apiService: ApiService = inject(ApiService);
   placa = input<string | null>(null);
   vistoriaId = signal<string | null>(null);
 
@@ -210,20 +211,16 @@ export class FormComponent implements OnDestroy {
     placaForm: string
   ): Promise<OrdemTransportadora | null> {
     try {
-      // Adicione um timestamp para evitar cache
       const t = new Date().getTime();
-      const response = await fetch(`http://192.168.53.193:5000/pendencias?t=${t}`);
+      // SUBSTITUÍDO: Agora usa o método getPendencias do serviço
+      const response = await this.apiService.getPendencias(t);
 
       if (!response.ok) return null;
-
       const data = await response.json();
       const pendentes = data.pendentes || [];
-
       const placaNormalizada = placaForm.trim().toUpperCase();
 
       const encontrada = pendentes.find((p: any) => {
-        if (!p?.placa) return false;
-        // Pega só a placa, ignorando horário se tiver (ex: "10:00/AAA-1234")
         const placaApi = p.placa.includes('/') ? p.placa.split('/')[1] : p.placa;
         return placaApi?.trim().toUpperCase() === placaNormalizada;
       });
@@ -245,7 +242,8 @@ export class FormComponent implements OnDestroy {
 
  async buscarIdPorPlaca(placaForm: string): Promise<string | null> {
     try {
-      const response = await fetch('http://192.168.53.193:5000/pendencias');
+      const t = new Date().getTime();
+      const response = await this.apiService.getPendencias(t);
       if (!response.ok) return null;
 
       const data = await response.json();
@@ -253,32 +251,18 @@ export class FormComponent implements OnDestroy {
       const placaNormalizada = placaForm.trim().toUpperCase();
 
       const encontrada = pendentes.find((p: any) => {
-        if (!p?.placa) return false;
         const placaApi = p.placa.includes('/') ? p.placa.split('/')[1] : p.placa;
         return placaApi?.trim().toUpperCase() === placaNormalizada;
       });
 
-      if (!encontrada) return null;
-
-      console.log('✅ Pendência encontrada (Com Local):', encontrada);
-
-      // 🔥 CORREÇÃO: SE TEM LOCAL NA PENDÊNCIA, USE ELE!
-      if (encontrada.local) {
-          // Normaliza: MATRIZ -> Matriz
+      if (encontrada?.local) {
           const localFormatado = encontrada.local.charAt(0).toUpperCase() + encontrada.local.slice(1).toLowerCase();
-          
           if (['Matriz', 'Filial'].includes(localFormatado)) {
-              console.log(`📍 Aplicando Local do Agendamento: ${localFormatado}`);
               this.form.get('dadosIniciais.localVistoria')?.setValue(localFormatado);
           }
       }
-
-      return encontrada.id ?? null;
-
-    } catch (e) {
-      console.error('Erro ao buscar ID:', e);
-      return null;
-    }
+      return encontrada?.id ?? null;
+    } catch (e) { return null; }
   }
 
   updatePlaca(placaDoBanco: string) {
@@ -348,43 +332,22 @@ export class FormComponent implements OnDestroy {
       this.form
         .get('fotosVistoria.placas.placa1')
         ?.setValue(placaFormatada);
+      // Dentro do effect()
       try {
           console.log(`🔍 Buscando dados de carga para placa: ${placaFormatada}`);
-          const resp = await fetch(`http://192.168.53.193:5000/dados-carga/${placaFormatada}`);
           
-          if (resp.ok) {
-              const dados = await resp.json();
-              console.log('📦 Dados recebidos do Python:', dados); // OLHE ISSO NO CONSOLE DO NAVEGADOR (F12)
-              
-              if (dados.encontrado) {
-                  const controls = this.form.controls.dadosIniciais.controls;
-                  
-                  // Preenche TRANSPORTADORA
-                  if (dados.transportadora) {
-                      controls.transportadora.setValue(dados.transportadora);
-                      controls.transportadora.disable(); 
-                  }
-
-                  // Preenche PRODUTO
-                  if (dados.produto) {
-                      controls.produto.setValue(dados.produto);
-                      controls.produto.disable(); 
-                  } else {
-                      // Se vier vazio, forçamos um texto
-                      controls.produto.setValue("Produto não identificado no sistema");
-                      controls.produto.disable();
-                  }
-                  
-                  // Preenche ORDEM
-                  if (dados.pre_ordem) {
-                      controls.numeroOrdem.setValue(dados.pre_ordem);
-                      controls.numeroOrdem.disable(); 
+          // SUBSTITUÍDO: Usa o Observable do serviço (conversão para Promise)
+          this.apiService.getDadosCarga(placaFormatada).subscribe({
+              next: (dados) => {
+                  if (dados.encontrado) {
+                      const controls = this.form.controls.dadosIniciais.controls;
+                      if (dados.transportadora) { controls.transportadora.setValue(dados.transportadora); controls.transportadora.disable(); }
+                      if (dados.produto) { controls.produto.setValue(dados.produto); controls.produto.disable(); }
+                      if (dados.pre_ordem) { controls.numeroOrdem.setValue(dados.pre_ordem); controls.numeroOrdem.disable(); }
                   }
               }
-          }
-      } catch (err) {
-          console.error("❌ Erro ao buscar dados da carga:", err);
-      }
+          });
+      } catch (err) { console.error("Erro ao buscar dados da carga:", err); }
 
       // 🔑 NOVO: resolve o ID usando a placa
       const idEncontrado = await this.buscarIdPorPlaca(placaFormatada);
@@ -1063,44 +1026,22 @@ nextStep(): void {
   }
 
 private async podeEnviarParaApi(): Promise<boolean> {
-  // 1. Verifica internet básica (Wifi/Dados)
   if (!navigator.onLine) {
     alert('Sem conexão de rede. Verifique o Wifi ou 4G.');
     return false;
   }
  
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 segundos timeout
- 
-    // 🔑 TRUQUE ANTI-CACHE:
-    // Adicionamos ?t=... com a hora atual para o navegador achar que é uma url nova
-    // e não usar a memória antiga.
     const timestamp = new Date().getTime();
-    const urlTeste = `http://192.168.53.193:5000/pendencias?noCache=${timestamp}`;
+    // SUBSTITUÍDO: Agora usa o ApiService para testar a conexão
+    const resp = await this.apiService.getPendencias(timestamp);
  
-    const resp = await fetch(urlTeste, {
-      method: 'GET',
-      cache: 'no-store', // Força não usar cache
-      headers: { 
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache'
-      },
-      signal: controller.signal
-    });
- 
-    clearTimeout(timeoutId);
- 
-    if (resp.ok) {
-      return true;
-    } else {
-      alert(`Servidor conectado, mas respondeu com erro: ${resp.status}`);
-      return false;
-    }
- 
+    if (resp.ok) return true;
+    
+    alert(`Servidor conectado, mas respondeu com erro: ${resp.status}`);
+    return false;
   } catch (error) {
-    // Se caiu aqui, é porque falhou MESMO (timeout ou sem rede)
-    alert('Falha ao conectar com o servidor (192.168.53.193). Verifique se ele está ligado.');
+    alert('Falha ao conectar com o servidor. Verifique se o backend está ligado.');
     return false;
   }
 }
@@ -1121,32 +1062,24 @@ async onSubmit() {
     return;
   }
 
-  // 1. TRAVA IMEDIATA (Evita clique duplo)
   this.isSubmitting.set(true);
   this.submissionError.set(null);
 
-  // 2. Validação de Conexão
   const conexaoOk = await this.podeEnviarParaApi();
   if (!conexaoOk) {
     this.isSubmitting.set(false);
     return;
   }
 
-  // 3. Preparação Visual
-  // Avança a barra de progresso para 100% visualmente
   this.currentStep.update(() => this.totalSteps);
   this.submittedData.set(null);
 
   try {
-    // 4. Formatação de Datas
     const nowStr = this.formatarParaBanco(new Date());
-    // Atualiza o fim sem disparar eventos de formulário
     this.form.controls.dadosIniciais.controls.fim.setValue(nowStr, { emitEvent: false });
 
-    // Pega os dados brutos do formulário
     const rawValue = this.form.getRawValue();
 
-    // Formata datas de chegada/inicio se necessário
     let chegadaFmt = rawValue.dadosIniciais.chegada;
     if (chegadaFmt && !chegadaFmt.includes('/')) {
       chegadaFmt = this.formatarParaBanco(new Date(chegadaFmt));
@@ -1157,10 +1090,9 @@ async onSubmit() {
       vistoriaFmt = this.formatarParaBanco(new Date(vistoriaFmt));
     }
 
-    // 5. CRIAÇÃO DO FORMDATA (O Segredo do Upload)
     const formData = new FormData();
 
-    // --- A. CAMPOS DE TEXTO BÁSICOS ---
+    // --- A. CAMPOS DE TEXTO ---
     formData.append('id', this.vistoriaId() || '');
     formData.append('chegada', chegadaFmt);
     formData.append('vistoria', vistoriaFmt);
@@ -1177,27 +1109,16 @@ async onSubmit() {
     formData.append('caminhaoLiberado', rawValue.finalizacao.caminhaoLiberado);
     formData.append('observacoes', rawValue.finalizacao.observacoes);
 
+    const placas = rawValue.fotosVistoria?.placas;
+    if (placas?.placa1) formData.append('placa1', placas.placa1);
+    if (placas?.placa2) formData.append('placa2', placas.placa2);
+    if (placas?.placa3) formData.append('placa3', placas.placa3);
 
-const placas = rawValue.fotosVistoria?.placas;
-    
-    if (placas?.placa1) {
-        formData.append('placa1', placas.placa1);
-    }
-
-    if (placas?.placa2) {
-        formData.append('placa2', placas.placa2);
-    }
-    
-    if (placas?.placa3) {
-        formData.append('placa3', placas.placa3);
-    }
-    // --- B. CHECKLIST (Achata os objetos {status: '...', outro: '...'} para texto simples) ---
-    // Função auxiliar para pegar o valor correto (se for "Outro", pega o texto digitado)
+    // --- B. CHECKLIST ---
     const getResposta = (grupo: any) => {
       return grupo.status === 'Outro' ? (grupo.outro || 'Outro (sem esp.)') : grupo.status;
     };
 
-    // Inspeção Interna
     formData.append('limpeza', getResposta(rawValue.inspecaoInterna.limpeza));
     formData.append('danos', getResposta(rawValue.inspecaoInterna.danos));
     formData.append('umidade', getResposta(rawValue.inspecaoInterna.umidade));
@@ -1206,13 +1127,10 @@ const placas = rawValue.fotosVistoria?.placas;
     formData.append('bocasGraneleiras', getResposta(rawValue.inspecaoInterna.bocasGraneleiras));
     formData.append('lonas', getResposta(rawValue.inspecaoInterna.lonas));
     formData.append('chapasMdf', getResposta(rawValue.inspecaoInterna.chapasMdf));
-
-    // Proteção Carga
     formData.append('lonasProtecao', getResposta(rawValue.protecaoCarga.lonasProtecao));
     formData.append('equipamentos', getResposta(rawValue.protecaoCarga.equipamentos));
     formData.append('tampasLaterais', getResposta(rawValue.protecaoCarga.tampasLaterais));
 
-    // Detalhes Específicos (Baú / Container)
     if (rawValue.detalhesVeiculo?.caminhaoBau) {
       formData.append('alturaPorta', getResposta(rawValue.detalhesVeiculo.caminhaoBau.alturaPorta));
       formData.append('larguraPorta', getResposta(rawValue.detalhesVeiculo.caminhaoBau.larguraPorta));
@@ -1222,9 +1140,7 @@ const placas = rawValue.fotosVistoria?.placas;
       formData.append('verificacaoPeso', getResposta(rawValue.detalhesVeiculo.container.verificacaoPeso));
     }
 
-    // --- C. ARQUIVOS (Converte Base64 para Blob binário) ---
-    
-    // Função Helper Interna
+    // --- C. ARQUIVOS (Base64 para Blob) ---
     const dataURItoBlob = (dataURI: string | null) => {
       if (!dataURI || !dataURI.includes(',')) return null;
       const byteString = atob(dataURI.split(',')[1]);
@@ -1235,43 +1151,32 @@ const placas = rawValue.fotosVistoria?.placas;
       return new Blob([ab], { type: mimeString });
     };
 
-    // Fotos (JPG)
     const fotoP1 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca1);
     if (fotoP1) formData.append('fotoPlaca1', fotoP1, 'placa1.jpg');
-
     const fotoP2 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca2);
     if (fotoP2) formData.append('fotoPlaca2', fotoP2, 'placa2.jpg');
-
     const fotoP3 = dataURItoBlob(rawValue.fotosVistoria.placas.fotoPlaca3);
     if (fotoP3) formData.append('fotoPlaca3', fotoP3, 'placa3.jpg');
-
     const fotoInt1 = dataURItoBlob(rawValue.fotosVistoria.interiorCarroceria.fotoInterior1);
     if (fotoInt1) formData.append('fotoInterior1', fotoInt1, 'interior1.jpg');
-
     const fotoInt2 = dataURItoBlob(rawValue.fotosVistoria.interiorCarroceria.fotoInterior2);
     if (fotoInt2) formData.append('fotoInterior2', fotoInt2, 'interior2.jpg');
 
-    // Assinaturas (PNG)
     const assMot = dataURItoBlob(rawValue.finalizacao.motoristaAssinatura);
     if (assMot) formData.append('assinaturaMotorista', assMot, 'motorista.png');
-
     const assVis = dataURItoBlob(rawValue.finalizacao.vistoriadorAssinatura);
     if (assVis) formData.append('assinaturaVistoriador', assVis, 'vistoriador.png');
 
-
-    // 6. Limpeza do Rascunho (Antes de enviar para evitar conflito)
+    // 6. Limpeza do Rascunho
     const idParaRemover = this.vistoriaId();
     if (idParaRemover) {
       await this.offlineStorage.removerDraft(idParaRemover);
     }
 
-    // 7. Envio para a API (Sem Header JSON, pois é Multipart)
+    // 7. Envio via ApiService (FIM DOS IPs FIXOS!)
     console.log('📤 Enviando FormData para o servidor...');
     
-    fetch('http://192.168.53.193:5000/vistoria', {
-      method: 'POST',
-      body: formData, // O navegador define o boundary automaticamente
-    })
+    this.apiService.enviarVistoria(formData)
     .then(async response => {
       if (!response.ok) {
         const errText = await response.text();
@@ -1280,13 +1185,11 @@ const placas = rawValue.fotosVistoria?.placas;
       return response.json();
     })
     .then(data => {
-      console.log('✅ Sucesso Total:', data);
-      alert('Vistoria enviada com sucesso!');
-      this.finished.emit(); // Avisa o componente pai se necessário
-      this.router.navigate(['/']); // Volta pro painel
+      alert('✅ Vistoria enviada com sucesso!');
+      this.finished.emit();
+      this.router.navigate(['/']);
     })
     .catch(err => {
-      console.error('❌ Erro no envio:', err);
       alert(`Erro ao enviar vistoria: ${err.message}`);
       this.submissionError.set(err.message);
     })
@@ -1295,7 +1198,6 @@ const placas = rawValue.fotosVistoria?.placas;
     });
 
   } catch (error) {
-    console.error('Erro crítico na preparação do envio:', error);
     alert('Ocorreu um erro interno ao preparar os dados.');
     this.isSubmitting.set(false);
   }

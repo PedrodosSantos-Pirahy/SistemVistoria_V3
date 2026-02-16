@@ -1,14 +1,14 @@
 import { Component, signal, computed, inject, OnInit, effect } from '@angular/core';
+import { ApiService } from '../../services/app.service'; // Importe o serviço
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { DomSanitizer } from '@angular/platform-browser';
 
-// Interface para ocupação (Agora com ID!)
 interface IntervaloOcupado {
   inicio: string;
   fim: string;
-  id: string; // 🔥 Novo campo para saber quem é quem
+  id: string;
 }
 
 @Component({
@@ -19,6 +19,7 @@ interface IntervaloOcupado {
 })
 export class MonitoramentoComponent implements OnInit {
   
+  private apiService: ApiService = inject(ApiService);
   private http: HttpClient = inject(HttpClient);
   private sanitizer: DomSanitizer = inject(DomSanitizer);
 
@@ -37,113 +38,184 @@ export class MonitoramentoComponent implements OnInit {
   detalhesChecklist = signal<any>(null);
   fotosDisponiveis = signal<any>(null);
   loadingDetalhes = signal(false);
+  
+  // 🔥 DECLARAÇÃO DO TIMESTAMP (Obrigatório)
+  timestampFotos = signal(0);
 
-  pdfUrlSegura = computed(() => {
+  // --- NOVOS ESTADOS PARA CANCELAMENTO ---
+  showCancelModal = signal(false);
+  motivoCancelamento = signal('');
+  usuarioNomeLogado = ''; // Variável simples para o nome fixo
+
+pdfUrlSegura = computed(() => {
     const item = this.itemSelecionado();
     if (!item || !item.tem_pdf) return null;
-    return this.sanitizer.bypassSecurityTrustResourceUrl(`http://192.168.53.193:5002/pdf/${item.id}`);
+    // Usa o helper do serviço para montar a URL correta
+    const url = this.apiService.getPdfUrl(item.id);
+    return this.sanitizer.bypassSecurityTrustResourceUrl(url);
   });
 
-  // --- EDIÇÃO (Lógica do Agendamento) ---
+  // --- EDIÇÃO ---
   modalEdicaoAberto = signal(false);
-  
-  // Ocupações do dia selecionado no modal
   ocupacoesDoDia = signal<IntervaloOcupado[]>([]);
 
   formEdicao = signal({ 
-    id: '', 
-    placa: '', 
-    data: '', // YYYY-MM-DD
-    hora: '', // HH:MM
-    duracao: 30,
-    local: '', 
-    pre_ordens: ['', '', '', '', ''] 
+    id: '', placa: '', data: '', hora: '', 
+    duracao: 30, local: '', pre_ordens: ['', '', '', '', ''] 
   });
 
-  // Efeito para carregar ocupações quando a DATA da edição muda
-  constructor() {
-    effect(() => {
-        const data = this.formEdicao().data;
-        if (this.modalEdicaoAberto() && data) {
-            this.carregarOcupacoes(data);
+constructor() {
+  effect(() => {
+    const data = this.formEdicao().data;
+    const local = this.formEdicao().local; // 🔥 NOVO: Agora vigia também a Unidade
+    
+    // Se o modal estiver aberto e tivermos data e local, busca a ocupação correta
+    if (this.modalEdicaoAberto() && data && local) {
+        this.carregarOcupacoes(data, local);
+    }
+  });
+}
+readonly tipoLocal = signal<'Qualquer' | 'Matriz' | 'Filial'>('Qualquer');
+readonly tipoStatus = signal<'Todas' | 'Pendentes' | 'Realizadas'>('Todas');
+ngOnInit() {
+    // 2. Configura o filtro baseado no usuário logado
+    const dados = localStorage.getItem('usuario_logado');
+    if (dados) {
+        const user = JSON.parse(dados);
+        this.usuarioNomeLogado = user.nome;
+        if (user.local && (user.local === 'Matriz' || user.local === 'Filial')) {
+            this.tipoLocal.set(user.local);
         }
-    });
-  }
-
-  ngOnInit() {
+    }
     this.carregarDados();
     setInterval(() => this.carregarDados(), 45000);
-  }
-
-  carregarDados() {
+}
+carregarDados() {
     const page = this.paginaAtual();
     const limit = this.itensPorPagina();
     const busca = this.filtroGeral();
+    const local = this.tipoLocal(); // 👈 Pega o valor do sinal
+    const status = this.tipoStatus();
+
     if (!busca) this.loading.set(true);
 
-    this.http.get<any>(`http://192.168.53.193:5002/monitoramento?page=${page}&limit=${limit}&q=${busca}`)
-      .subscribe({
+    this.apiService.getMonitoramento(page, limit, busca, local, status).subscribe({
         next: (res) => {
-          this.dadosTabela.set(res.data);
-          if (res.meta) {
-            this.totalItens.set(res.meta.total_items);
-            this.totalPaginas.set(res.meta.total_pages);
-          }
-          this.loading.set(false);
+            this.dadosTabela.set(res.data);
+            if (res.meta) {
+                this.totalItens.set(res.meta.total_items);
+                this.totalPaginas.set(res.meta.total_pages);
+            }
+            this.loading.set(false);
         },
-        error: (err) => { this.loading.set(false); }
+        error: () => this.loading.set(false)
+    });
+}
+// No arquivo: monitoramento.component.ts
+
+// Função genérica para atualizar campos simples (placa, duração, etc)
+updateEdicao(campo: string, valor: any) {
+  this.formEdicao.update(atual => ({ ...atual, [campo]: valor }));
+}
+
+// Função específica para trocar o local (limpa a hora para forçar nova escolha)
+setLocalEdicao(local: string) {
+  this.formEdicao.update(atual => ({ ...atual, local: local, hora: '' }));
+}
+
+// Função para atualizar uma ordem específica dentro do array
+updatePreOrdemEdicao(index: number, valor: string) {
+  this.formEdicao.update(atual => {
+    const novas = [...atual.pre_ordens];
+    novas[index] = valor;
+    return { ...atual, pre_ordens: novas };
+  });
+}
+  // --- AÇÕES PRINCIPAIS ---
+
+setStatus(status: 'Todas' | 'Pendentes' | 'Realizadas') {
+    this.tipoStatus.set(status);
+    this.paginaAtual.set(1);
+    this.carregarDados();
+}
+
+  setLocal(local: 'Qualquer' | 'Matriz' | 'Filial') {
+    this.tipoLocal.set(local);
+    this.paginaAtual.set(1); // Volta para a página 1 ao filtrar
+    this.carregarDados();
+}
+  // 🔥 1. ABRIR DETALHES (CORRIGIDO PARA FOTOS)
+  abrirDetalhes(item: any) { 
+      // Primeiro: Gera um número novo para enganar o cache
+      this.timestampFotos.set(new Date().getTime());
+      
+      // Segundo: Seleciona o item e abre a tela
+      this.itemSelecionado.set(item); 
+      this.paginaDetalhesAberta.set(true); 
+      
+      // Terceiro: Busca os dados
+      this.carregarDetalhes(item.id); 
+  }
+  
+  fecharDetalhes() { 
+      this.paginaDetalhesAberta.set(false); 
+  }
+  
+carregarDetalhes(id: string) {
+      if(!id) return;
+      this.loadingDetalhes.set(true);
+      // Substituído: Chamada via ApiService
+      this.apiService.getDetalhesFinalizados(id).subscribe({
+        next: (res) => {
+            if(res.encontrado) { 
+                this.detalhesChecklist.set(res);
+                this.fotosDisponiveis.set(res.fotos);
+            }
+            this.loadingDetalhes.set(false);
+        },
+        error: () => this.loadingDetalhes.set(false)
       });
   }
 
-  // --- ABERTURA DO MODAL DE EDIÇÃO ---
-  // Em monitoramento.component.ts
+  // 🔥 2. GERADOR DE URL (Fica igual, mas agora recebe o timestamp certo)
+getFotoUrl(tipo: string): string { 
+      // Substituído: Usa o helper do serviço
+      return this.apiService.getFotoUrl(this.itemSelecionado()?.id, tipo); 
+  }
+
+  // --- EDIÇÃO ---
+  aoMudarDataEdicao(novaData: string) {
+    this.formEdicao.update(atual => ({ ...atual, data: novaData, hora: '' }));
+  }
 
   abrirEdicao(event: Event, item: any) {
     event.stopPropagation();
-    
-    // Formata a data para YYYY-MM-DD
     const [dia, mes, ano] = item.data.split('/');
     const dataIso = `${ano}-${mes}-${dia}`;
-
-    // 🔥 AGORA VAI PUXAR TUDO AUTOMATICAMENTE
-    const ordensArray = [
-        item.pre_ordem1 || '', 
-        item.pre_ordem2 || '', 
-        item.pre_ordem3 || '',
-        item.pre_ordem4 || '', 
-        item.pre_ordem5 || ''
-    ];
+    const ordensArray = [ item.pre_ordem1 || '', item.pre_ordem2 || '', item.pre_ordem3 || '', item.pre_ordem4 || '', item.pre_ordem5 || '' ];
 
     this.formEdicao.set({ 
-        id: item.id, 
-        placa: item.placa,
-        data: dataIso,
-        hora: item.h_inicio,
-        duracao: item.duracao || 30, // Pega a duração do banco ou 30 padrão
-        local: item.local || 'Matriz',
-        pre_ordens: ordensArray
+        id: item.id, placa: item.placa, data: dataIso, hora: item.h_inicio,
+        duracao: item.duracao || 30, local: item.local || 'Matriz', pre_ordens: ordensArray
     });
-
     this.modalEdicaoAberto.set(true);
   }
 
-  // --- LÓGICA VISUAL DE SLOTS (Igual ao Agendamento) ---
-  carregarOcupacoes(data: string) {
-    this.http.get<IntervaloOcupado[]>(`http://192.168.53.193:5002/agendamentos-dia?data=${data}`)
-      .subscribe(dados => this.ocupacoesDoDia.set(dados));
-  }
-
+// No monitoramento.component.ts
+carregarOcupacoes(data: string, local: string) {
+    this.apiService.getAgendamentosDia(data, local).subscribe(dados => {
+        this.ocupacoesDoDia.set(dados);
+    });
+}
   private timeToMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
     return h * 60 + m;
   }
 
-  // 🔥 COMPUTED PODEROSA: Gera a grade visual ignorando o próprio ID
   slotsVisuais = computed(() => {
     const times = [];
     const ocupacoes = this.ocupacoesDoDia();
-    const meuId = this.formEdicao().id; // ID de quem estou editando
-    
+    const meuId = this.formEdicao().id; 
     const now = new Date();
     const isToday = this.formEdicao().data === now.toISOString().split('T')[0];
     const currentHour = now.getHours();
@@ -153,92 +225,74 @@ export class MonitoramentoComponent implements OnInit {
       for (let m of ['00', '15', '30', '45']) {
         const slotTimeStr = `${h.toString().padStart(2, '0')}:${m}`;
         const slotMin = this.timeToMinutes(slotTimeStr);
-
-        // 1. Passado?
         let isPast = false;
-        if (isToday) {
-           if (h < currentHour || (h === currentHour && Number(m) < currentMinute)) {
-             isPast = true;
-           }
-        }
+        if (isToday) { if (h < currentHour || (h === currentHour && Number(m) < currentMinute)) isPast = true; }
 
-        // 2. Calcula Lotação (IGNORANDO O PRÓPRIO ID)
         let load = 0;
         for (const ocupacao of ocupacoes) {
-           // 🚨 O PULO DO GATO: Se a ocupação for do item que estou editando, IGNORA.
-           // Assim o usuário vê o slot dele como "livre" (verde) para poder manter ou trocar.
            if (ocupacao.id === meuId) continue;
-
            const inicioMin = this.timeToMinutes(ocupacao.inicio);
            const fimMin = this.timeToMinutes(ocupacao.fim);
-
-           if (slotMin >= inicioMin && slotMin < fimMin) {
-             load++;
-           }
+           if (slotMin >= inicioMin && slotMin < fimMin) load++;
         }
-
-        times.push({ 
-          time: slotTimeStr, 
-          load: load, 
-          isPast: isPast 
-        });
+        times.push({ time: slotTimeStr, load: load, isPast: isPast });
       }
     }
     return times;
   });
 
-  selecionarHorario(time: string) {
-    this.formEdicao.update(v => ({ ...v, hora: time }));
-  }
-  // Adicione este método na sua classe
-  aoMudarDataEdicao(novaData: string) {
-    this.formEdicao.update(atual => ({
-      ...atual,        // Mantém placa, id, etc.
-      data: novaData,  // Atualiza a data
-      hora: ''         // Limpa a hora para forçar o usuário a escolher de novo
-    }));
-    
-    // O effect() que já existe no seu constructor vai perceber essa mudança 
-    // e chamar o carregarOcupacoes() automaticamente.
-  }
+  selecionarHorario(time: string) { this.formEdicao.update(v => ({ ...v, hora: time })); }
 
-  salvarEdicao() {
-    this.http.post(`http://192.168.53.193:5000/gerenciar-agendamento`, this.formEdicao())
-      .subscribe({
+salvarEdicao() {
+    // Substituído: Chamada via ApiService (Porta 5000 no Dev / /api em Prod)
+    this.apiService.gerenciarAgendamento(this.formEdicao()).subscribe({
         next: () => {
           this.modalEdicaoAberto.set(false);
           this.carregarDados();
           alert('✅ Agendamento atualizado!');
         },
         error: (err) => alert(err.error?.error || 'Erro ao atualizar')
-      });
+    });
   }
 
-  desmarcarAgendamento() {
-    if (confirm('Deseja realmente desmarcar este agendamento?')) {
-        const payload = { id: this.formEdicao().id, acao: 'cancelar', motivo: 'Desmarcado pelo Monitoramento' };
-        this.http.post(`http://192.168.53.193:5000/gerenciar-agendamento`, payload).subscribe(() => {
-            this.modalEdicaoAberto.set(false);
-            this.carregarDados();
-        });
+desmarcarAgendamento() {
+    // Apenas abre o novo modal de cancelamento
+    this.showCancelModal.set(true);
+  }
+
+  fecharModalCancelamento() {
+    this.showCancelModal.set(false);
+    this.motivoCancelamento.set('');
+  }
+
+  confirmarCancelamentoMonitoramento() {
+    const idAgendamento = this.formEdicao().id;
+    const motivo = this.motivoCancelamento();
+
+    if (!motivo) {
+      alert('Por favor, informe o motivo do cancelamento.');
+      return;
     }
+
+    const payload = {
+      id: idAgendamento,
+      nome: this.usuarioNomeLogado, // Nome vindo do login, sem alteração
+      motivo: motivo
+    };
+
+    // Usa o endpoint /cancelar que já registra nome e motivo no banco
+    this.apiService.cancelarVistoria(payload).then(async (res) => {
+      if (res.ok) {
+        alert('✅ Agendamento cancelado com sucesso!');
+        this.fecharModalCancelamento();
+        this.modalEdicaoAberto.set(false); // Fecha também o modal de edição
+        this.carregarDados();
+      } else {
+        alert('Erro ao cancelar agendamento.');
+      }
+    }).catch(() => alert('Erro de conexão com o servidor.'));
   }
 
-  // Métodos auxiliares
   aoPesquisar() { this.paginaAtual.set(1); this.carregarDados(); }
   mudarPagina(p: number) { if (p >= 1 && p <= this.totalPaginas()) { this.paginaAtual.set(p); this.carregarDados(); } }
-  abrirDetalhes(item: any) { this.itemSelecionado.set(item); this.paginaDetalhesAberta.set(true); this.carregarDetalhes(item.id); }
-  fecharDetalhes() { this.paginaDetalhesAberta.set(false); }
-  carregarDetalhes(id: string) {
-      if(!id) return;
-      this.loadingDetalhes.set(true);
-      this.http.get<any>(`http://192.168.53.193:5002/detalhes/${id}`).subscribe({
-        next: (res) => {
-            if(res.encontrado) { this.detalhesChecklist.set(res); this.fotosDisponiveis.set(res.fotos); }
-            this.loadingDetalhes.set(false);
-        },
-        error: () => this.loadingDetalhes.set(false)
-      });
-  }
-  getFotoUrl(tipo: string): string { return `http://192.168.53.193:5002/foto/${this.itemSelecionado()?.id}/${tipo}`; }
 }

@@ -71,17 +71,18 @@ if __name__ == "__main__":
     #     senha_plana="123456",
     #     cargo="VIS",
     #     local="Filial",
+    
     #     matricula="5728"
     # )
 
     # --- EXEMPLO 3: Expedição da FILIAL ---
     criar_usuario(
-        nome="LILIAN TISCOSKI DA SILVA",
-        usuario="LILIANT",
-        senha_plana="5680",
+        nome="MATHEUS LUCHESE",
+        usuario="MATHEUSL",
+        senha_plana="2525",
         cargo="ADM",
         local="",
-        matricula="5680"
+        matricula="2525"
     )
     
     # --- EXEMPLO 4: ADMIN GERAL ---

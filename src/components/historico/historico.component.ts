@@ -5,6 +5,7 @@ import {
   OnInit,
   inject
 } from '@angular/core';
+import { ApiService } from '../../services/app.service';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -33,6 +34,7 @@ interface Historico {
 })
 export class HistoricoComponent implements OnInit {
 
+  private apiService: ApiService = inject(ApiService);
   private http: HttpClient = inject(HttpClient);
   private sanitizer: DomSanitizer = inject(DomSanitizer);
 
@@ -56,9 +58,19 @@ export class HistoricoComponent implements OnInit {
   modalAberto = signal(false);
   pdfSelecionado = signal<SafeResourceUrl | null>(null);
 
-  ngOnInit(): void {
-     this.buscarHistorico();
-  }
+readonly tipoLocal = signal<'Qualquer' | 'Matriz' | 'Filial'>('Qualquer');
+
+ngOnInit(): void {
+    // 2. Configura o filtro baseado no usuário logado
+    const dados = localStorage.getItem('usuario_logado');
+    if (dados) {
+        const user = JSON.parse(dados);
+        if (user.local && (user.local === 'Matriz' || user.local === 'Filial')) {
+            this.tipoLocal.set(user.local);
+        }
+    }
+    this.buscarHistorico();
+}
 
   // BUSCA NO SERVIDOR (PAGINADA)
   buscarHistorico(): void {
@@ -69,13 +81,11 @@ export class HistoricoComponent implements OnInit {
      const limit = this.itensPorPagina();
      const placa = this.normalizar(this.buscaPlaca());
      const transp = this.buscaTransp().toUpperCase();
+     const local = this.tipoLocal();
 
      // Envia tudo para o Python processar
-     const url = `http://192.168.53.193:5002/historico?page=${page}&limit=${limit}&placa=${placa}&transportadora=${transp}`;
-
-     this.http.get<any>(url).subscribe({
+     this.apiService.getHistorico(page, limit, placa, transp, local).subscribe({
          next: res => {
-            // Mapeia os dados
             const dados: Historico[] = (res.data || []).map((h: any) => ({
                  id: h.id,
                  placa: h.placa,
@@ -92,7 +102,6 @@ export class HistoricoComponent implements OnInit {
             
             this.historico.set(dados);
             
-            // Atualiza rodapé da paginação
             if (res.meta) {
                 this.totalItens.set(res.meta.total_items);
                 this.totalPaginas.set(res.meta.total_pages);
@@ -108,22 +117,40 @@ export class HistoricoComponent implements OnInit {
   }
 
   // AÇÕES
+  // 4. Helper para trocar o local
+setLocal(local: 'Qualquer' | 'Matriz' | 'Filial') {
+    this.tipoLocal.set(local);
+    this.paginaAtual.set(1);
+    this.buscarHistorico();
+}
+
   aoPesquisar() {
       this.paginaAtual.set(1); // Volta pra pag 1 ao filtrar
       this.buscarHistorico();
   }
 
-  mudarPagina(novaPagina: number) {
-    if (novaPagina >= 1 && novaPagina <= this.totalPaginas()) {
-      this.paginaAtual.set(novaPagina);
-      this.buscarHistorico();
-    }
-  }
+// No arquivo: src/components/historico/historico.component.ts
 
+mudarPagina(novaPagina: number) {
+  if (novaPagina >= 1 && novaPagina <= this.totalPaginas()) {
+    // 1. Atualiza o estado da página
+    this.paginaAtual.set(novaPagina);
+    
+    // 2. Busca os novos dados no servidor
+    this.buscarHistorico();
+
+    // 🚀 3. VOLTA PARA O TOPO (A mágica acontece aqui)
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth' // Faz a subida de forma suave em vez de um "pulo" seco
+    });
+  }
+}
   // PDF
-  abrirPdf(idVistoria: string): void {
+abrirPdf(idVistoria: string): void {
     if (!idVistoria) return;
-    const urlPdf = `http://192.168.53.193:5002/pdf/${idVistoria}`;
+    // SUBSTITUÍDO: Usa o helper do serviço para pegar a URL correta
+    const urlPdf = this.apiService.getPdfUrl(idVistoria);
     this.pdfSelecionado.set(this.sanitizer.bypassSecurityTrustResourceUrl(urlPdf));
     this.modalAberto.set(true);
   }

@@ -1,4 +1,5 @@
-import { Component, ChangeDetectionStrategy, Input, output, signal, OnInit, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, Input, output, signal, OnInit, computed, inject } from '@angular/core';
+import { ApiService } from '../../services/app.service'; // Importe o serviço
 import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
@@ -30,7 +31,8 @@ interface Inspection {
   ]
 })
 export class PainelComponent implements OnInit {
-
+  // Adicione ": ApiService" explicitamente aqui
+  private apiService: ApiService = inject(ApiService);
 
   // @Input() onSelect!: (placa: string) => void;
   /**
@@ -107,19 +109,15 @@ async fetchInspections(force = false): Promise<void> {
       const timestamp = new Date().getTime();
       if (force) console.log('🔄 Forçando atualização manual...');
       
-      // URL apontando para a sua API Python conectada ao Banco
-      const url = `http://192.168.53.193:5000/pendencias?t=${timestamp}${force ? '&force=true' : ''}`;
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-            'Cache-Control': 'no-cache'
-        }
-      });
+      // CHAMADA VIA SERVIÇO: 
+      // Substitui a URL fixa e o fetch manual pelo método do ApiService
+      const response = await this.apiService.getPendencias(timestamp, force);
 
       if (!response.ok) {
         throw new Error(`Erro de servidor: ${response.statusText} (${response.status})`);
       }
+      
+      // ... restante do código (processamento do json)
 
       const data = await response.json();
       const pendentes = data.pendentes; // O Python envia dentro de "pendentes"
@@ -288,16 +286,18 @@ async confirmarCancelamento() {
       motivo: this.motivo
     };
 
-    console.log('ENVIANDO CANCELAMENTO:', payload);
+    try {
+      // SUBSTITUÍDO: Agora usa o serviço centralizado
+      const response = await this.apiService.cancelarVistoria(payload);
 
-    // 🔥 ADICIONADO O http:// ABAIXO
-    const response = await fetch('http://192.168.53.193:5000/cancelar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-
-    const result = await response.json();
-    // ... restante do código
-}
+      if (!response.ok) throw new Error('Falha ao cancelar');
+      
+      const result = await response.json();
+      alert('✅ Cancelamento realizado!');
+      this.fecharModal();
+      this.fetchInspections(true);
+    } catch (error) {
+      alert('Erro ao cancelar vistoria');
+    }
+  }
 }

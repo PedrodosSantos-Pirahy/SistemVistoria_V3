@@ -1,22 +1,84 @@
 <div class="min-h-screen bg-[#f8f6f2] p-2 font-sans text-[#4a342d]">
   
-  <header class="mb-4 flex flex-col md:flex-row justify-between items-end gap-4">
-    <div>
-      <h1 class="text-xl font-black uppercase tracking-tighter text-[#6b2b1f]">Monitoramento de Vistoria</h1>
-      <p class="text-[10px] font-bold text-gray-400 uppercase">Visão Geral da Operação</p>
-    </div>
+<header class="mb-6 flex flex-col xl:flex-row justify-between items-end xl:items-center gap-6">
+  <div class="w-full xl:w-auto mb-2 xl:mb-0">
+    <h1 class="text-2xl font-black uppercase tracking-tighter text-[#6b2b1f] leading-none">Monitoramento</h1>
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-wide">Visão Geral da Operação</p>
+  </div>
+
+  <div class="flex flex-col md:flex-row flex-wrap items-end md:items-center justify-end gap-3 w-full xl:w-auto">
     
-    <div class="flex gap-2 w-full md:w-auto">
-      <input type="text" 
-             [ngModel]="filtroGeral()" 
-             (ngModelChange)="filtroGeral.set($event)" 
-             (keyup.enter)="aoPesquisar()"
-             placeholder="🔎 Filtrar..." 
-             class="bg-white border border-[#eadfce] rounded-lg px-3 py-1.5 text-xs font-bold uppercase w-full md:w-64 shadow-sm focus:outline-none focus:border-[#6b2b1f]">
-             
-      <button (click)="aoPesquisar()" class="bg-[#6b2b1f] text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm hover:bg-[#5a231a] transition">BUSCAR</button>
+    <div class="bg-gray-100 p-1.5 rounded-2xl flex h-11 w-full md:w-auto min-w-[240px] shadow-inner">
+      
+      <button (click)="setLocal('Qualquer')"
+              [ngClass]="tipoLocal() === 'Qualquer' ? 'bg-white text-[#6b2b1f] shadow-sm' : 'text-gray-500 hover:bg-gray-200/50'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Todas</span>
+      </button>
+
+      <button (click)="setLocal('Matriz')"
+              [ngClass]="tipoLocal() === 'Matriz' ? 'bg-white text-[#6b2b1f] shadow-sm' : 'text-gray-500 hover:bg-gray-200/50'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Matriz</span>
+      </button>
+
+      <button (click)="setLocal('Filial')"
+              [ngClass]="tipoLocal() === 'Filial' ? 'bg-white text-[#6b2b1f] shadow-sm' : 'text-gray-500 hover:bg-gray-200/50'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Filial</span>
+      </button>
     </div>
-  </header>
+
+    <div class="bg-gray-100 p-1.5 rounded-2xl flex h-11 w-full md:w-auto min-w-[280px] shadow-inner">
+      
+      <button (click)="setStatus('Todas')"
+              [ngClass]="tipoStatus() === 'Todas' ? 'bg-white text-gray-700 shadow-sm ring-1 ring-gray-200' : 'text-gray-500 hover:bg-gray-200/50'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Geral</span>
+      </button>
+
+      <button (click)="setStatus('Pendentes')"
+              [ngClass]="tipoStatus() === 'Pendentes' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-amber-200' : 'text-gray-500 hover:bg-gray-200/50 hover:text-amber-600/70'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" 
+             [class.text-amber-500]="tipoStatus() === 'Pendentes'" class="w-4 h-4 opacity-70 transition-colors">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd" />
+        </svg>
+        <span>Pendentes</span>
+      </button>
+
+      <button (click)="setStatus('Realizadas')"
+              [ngClass]="tipoStatus() === 'Realizadas' ? 'bg-white text-emerald-600 shadow-sm ring-1 ring-emerald-200' : 'text-gray-500 hover:bg-gray-200/50 hover:text-emerald-600/70'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" 
+             [class.text-emerald-500]="tipoStatus() === 'Realizadas'" class="w-4 h-4 opacity-70 transition-colors">
+          <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd" />
+        </svg>
+        <span>Realizadas</span>
+      </button>
+    </div>
+
+    <div class="flex h-11 gap-2 w-full md:w-auto min-w-[280px]">
+      <div class="relative w-full">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <span class="text-gray-400 text-sm">🔎</span>
+        </div>
+        <input type="text" 
+               [ngModel]="filtroGeral()" 
+               (ngModelChange)="filtroGeral.set($event)" 
+               (keyup.enter)="aoPesquisar()"
+               placeholder="Filtrar por placa, transportadora..." 
+               class="bg-white border-2 border-gray-100 pl-10 pr-4 h-full rounded-2xl text-xs font-bold uppercase w-full shadow-sm focus:outline-none focus:border-[#6b2b1f]/30 focus:ring-2 focus:ring-[#6b2b1f]/10 transition-all">
+      </div>
+             
+      <button (click)="aoPesquisar()" 
+              class="bg-[#6b2b1f] text-white px-6 h-full rounded-2xl text-[11px] font-black uppercase shadow-md hover:bg-[#5a231a] hover:shadow-lg active:scale-95 transition-all flex items-center gap-2">
+        BUSCAR
+      </button>
+    </div>
+
+  </div>
+</header>
 
   <div class="bg-white rounded-lg shadow-lg border border-[#eadfce] overflow-hidden flex flex-col h-[calc(100vh-180px)]">
     
@@ -32,7 +94,7 @@
       <table class="w-full text-left border-collapse">
         <thead class="sticky top-0 z-20">
           <tr class="bg-[#fdfbf9] border-b-2 border-[#eadfce] text-[9px] font-black text-gray-500 uppercase tracking-tight shadow-sm">
-            <th class="p-2 sticky left-0 bg-[#fdfbf9] border-r border-[#eadfce] w-24">Placa</th>
+            <th class="p-1 sticky left-0 bg-[#fdfbf9] border-r border-[#eadfce] w-20">Placa</th>
             
             <th class="p-2 w-20">Data</th>
             <th class="p-2 w-16">Início</th>
@@ -100,11 +162,11 @@
                     </td>
               <td class="p-2 text-center sticky right-0 bg-white group-hover:bg-[#f6efe8] border-l border-[#eadfce]">
                 @if (item.tem_pdf) {
-                    <a [href]="'http://192.168.53.193:5002/pdf/' + item.id + '?ngsw-bypass=true'" 
-                       target="_blank"
-                       (click)="$event.stopPropagation()" 
-                       class="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-50 text-red-600 transition-all" 
-                       title="Abrir PDF">
+                    <a [href]="apiService.getPdfUrl(item.id) + '?ngsw-bypass=true'" 
+                        target="_blank"
+                        (click)="$event.stopPropagation()" 
+                        class="inline-flex items-center justify-center w-6 h-6 rounded hover:bg-red-50 text-red-600 transition-all" 
+                        title="Abrir PDF">
                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
                          <path d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V12.75A3.75 3.75 0 0016.5 9h-1.875a1.875 1.875 0 01-1.875-1.875V5.25A3.75 3.75 0 009 1.5H5.625z" />
                          <path d="M12.971 1.816A5.23 5.23 0 0114.25 5.25v1.875c0 .207.168.375.375.375H16.5a5.23 5.23 0 013.434 1.279 9.768 9.768 0 00-6.963-6.963z" />
@@ -169,18 +231,27 @@
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Veículo (Placa)</label>
-                <input type="text" [(ngModel)]="formEdicao().placa" class="w-full border border-gray-300 rounded-lg p-3 text-sm font-black uppercase text-gray-700 bg-gray-50">
+                <input type="text" [ngModel]="formEdicao().placa" (ngModelChange)="updateEdicao('placa', $event)" 
+                       class="w-full border border-gray-300 rounded-lg p-3 text-sm font-black uppercase text-gray-700 bg-gray-50 outline-none">
             </div>
+
             <div>
-                <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Local da Vistoria</label>
-                <select [(ngModel)]="formEdicao().local" class="w-full border border-gray-300 rounded-lg p-3 text-sm font-bold bg-white">
-                    <option value="Matriz">Matriz</option>
-                    <option value="Filial">Filial</option>
-                </select>
+                <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1.5">Unidade de Atendimento</label>
+                <div class="flex p-1 bg-gray-100 rounded-xl h-[46px]">
+                    @for (loc of ['Matriz', 'Filial']; track loc) {
+                        <button (click)="setLocalEdicao(loc)"
+                            [class]="formEdicao().local === loc ? 'bg-white text-[#6b2b1f] shadow-sm ring-1 ring-[#6b2b1f]/10' : 'text-gray-400 hover:bg-gray-200'"
+                            class="flex-1 py-2 rounded-lg font-black text-[11px] transition-all uppercase">
+                            {{ loc }}
+                        </button>
+                    }
+                </div>
             </div>
+
             <div>
                 <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Duração Estimada</label>
-                <select [(ngModel)]="formEdicao().duracao" class="w-full border border-gray-300 rounded-lg p-3 text-sm font-bold bg-white text-[#6b2b1f]">
+                <select [ngModel]="formEdicao().duracao" (ngModelChange)="updateEdicao('duracao', $event)"
+                        class="w-full border border-gray-300 rounded-lg p-3 text-sm font-bold bg-white text-[#6b2b1f] outline-none">
                     <option [ngValue]="15">15 min (Rápida)</option>
                     <option [ngValue]="30">30 min (Padrão)</option>
                     <option [ngValue]="45">45 min (Longa)</option>
@@ -190,11 +261,12 @@
         </div>
 
         <div class="bg-gray-50 p-4 rounded-xl border border-dashed border-gray-300">
-            <label class="block text-[9px] font-bold text-gray-400 uppercase mb-2">Ordens de Carregamento (Max 6 dígitos)</label>
+            <label class="block text-[9px] font-bold text-gray-400 uppercase mb-2">Ordens de Carregamento</label>
             <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                @for (ordem of [0,1,2,3,4]; track $index) {
+                @for (ordem of formEdicao().pre_ordens; track $index) {
                     <input type="text" 
-                        [(ngModel)]="formEdicao().pre_ordens[$index]" 
+                        [ngModel]="ordem" 
+                        (ngModelChange)="updatePreOrdemEdicao($index, $event)"
                         maxlength="6"
                         placeholder="ORDEM"
                         class="w-full border border-gray-300 rounded-lg p-2 text-xs font-black text-center uppercase focus:ring-2 focus:ring-amber-500 outline-none">
@@ -204,30 +276,26 @@
 
         <div>
             <div class="flex justify-between items-end mb-2">
-                <label class="block text-[9px] font-bold text-gray-400 uppercase">Selecione o Horário (Data: {{ formEdicao().data }})</label>
-                <input type="date" 
-                [ngModel]="formEdicao().data" 
-                (ngModelChange)="aoMudarDataEdicao($event)"
-                class="border border-gray-200 rounded px-2 py-1 text-xs font-bold text-gray-600">
+                <label class="block text-[9px] font-bold text-gray-400 uppercase">Selecione o Horário</label>
+                <input type="date" [ngModel]="formEdicao().data" (ngModelChange)="aoMudarDataEdicao($event)"
+                       class="border border-gray-200 rounded px-2 py-1 text-xs font-bold text-gray-600">
             </div>
             
             <div class="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 gap-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
                 @for (slot of slotsVisuais(); track slot.time) {
                     <button (click)="selecionarHorario(slot.time)"
                         [disabled]="slot.load >= 3 || slot.isPast"
-                        class="relative p-2 rounded-lg border transition-all flex flex-col items-center gap-1 group"
+                        class="relative p-2 rounded-lg border transition-all flex flex-col items-center gap-1"
                         [ngClass]="{
                             'bg-white border-gray-200 hover:border-amber-500 hover:shadow-md': slot.load < 3 && !slot.isPast && formEdicao().hora !== slot.time,
                             'bg-gray-100 opacity-40 cursor-not-allowed': slot.load >= 3 || slot.isPast,
                             'bg-amber-500 text-white border-amber-600 shadow-md transform scale-105': formEdicao().hora === slot.time
                         }">
-                        
                         <span class="text-xs font-black tracking-tight">{{ slot.time }}</span>
-                        
                         <div class="flex gap-0.5">
                             @for (v of [1,2,3]; track v) {
                                 <div [class]="v <= slot.load ? 'bg-red-400' : (formEdicao().hora === slot.time ? 'bg-white/50' : 'bg-green-400')"
-                                    class="w-1.5 h-1.5 rounded-full"></div>
+                                     class="w-1.5 h-1.5 rounded-full"></div>
                             }
                         </div>
                     </button>
@@ -536,5 +604,48 @@
       
           }
         </main>
+</div>
+} @if (showCancelModal()) {
+  <div class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4 font-sans animate-fade-in">
+    <div class="bg-white w-full max-w-md rounded-xl shadow-2xl border-t-4 border-red-600 overflow-hidden">
+      
+      <div class="p-6">
+        <h2 class="text-xl font-black text-gray-800 uppercase mb-2">Confirmar Cancelamento</h2>
+        <p class="text-sm text-gray-600 font-medium mb-6">
+          Você está cancelando a vistoria da placa <strong class="text-red-600">{{ formEdicao().placa }}</strong>.
+        </p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-gray-400 mb-1">Responsável (Identificado pelo Sistema)</label>
+            <input type="text" [value]="usuarioNomeLogado" disabled
+                   class="w-full border border-gray-200 rounded-lg p-3 text-sm font-bold text-gray-400 bg-gray-50 cursor-not-allowed" />
+          </div>
+
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-gray-400 mb-1">Motivo do Cancelamento *</label>
+            <textarea [ngModel]="motivoCancelamento()" 
+                      (ngModelChange)="motivoCancelamento.set($event)"
+                      rows="3"
+                      class="w-full border border-gray-300 rounded-lg p-3 text-sm font-medium text-gray-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none"
+                      placeholder="Descreva obrigatoriamente o motivo..."></textarea>
+          </div>
+        </div>
       </div>
+
+      <div class="bg-gray-50 px-6 py-4 flex justify-end gap-3 border-t border-gray-100">
+        <button (click)="fecharModalCancelamento()" 
+                class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-600 font-bold uppercase text-xs hover:bg-gray-100">
+          Voltar
+        </button>
+
+        <button (click)="confirmarCancelamentoMonitoramento()"
+                [disabled]="!motivoCancelamento()"
+                class="px-6 py-2 rounded-lg bg-red-600 text-white font-bold uppercase text-xs hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-md transition-all">
+          Confirmar Cancelamento
+        </button>
+      </div>
+
+    </div>
+  </div>
 }
