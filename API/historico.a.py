@@ -108,24 +108,26 @@ def get_historico():
                     NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')
                 )),
                 
-                COALESCE(r.transportadora, y."TRP_NOME", 'Aguardando...'),
+                -- BUSCA SEGURA DA TRANSPORTADORA (LIMIT 1)
+                COALESCE(r.transportadora, 
+                    (SELECT y2."TRP_NOME" 
+                     FROM "UTRAPLACA" x2 
+                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
+                     LIMIT 1), 
+                'Aguardando...'),
+                
                 r.status,
                 r.caminhao_liberado, 
                 r.motorista, 
                 r.vistoriador,
-                
-                -- 🔥 CORREÇÃO CIRÚRGICA AQUI:
-                -- Se existe PDF (r.pdf_documento), retornamos a.id (ID DO AGENDAMENTO).
-                -- Motivo: A rota /pdf/<id> busca por "WHERE id_agend = ...".
-                -- Então precisamos passar o ID do Agendamento (39) para ela achar a Vistoria certa (31).
                 CASE WHEN r.pdf_documento IS NOT NULL THEN a.id ELSE NULL END,
-                
                 r.observacoes
 
             FROM "vistoria"."VAGENDAMENTO" a
             INNER JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
-            LEFT JOIN "UTRAPLACA" x ON REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g')
-            LEFT JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
+            
+            -- 🔥 AS LINHAS DO 'LEFT JOIN UTRAPLACA' FORAM DELETADAS DAQUI TAMBÉM! 🔥
             
             {where_final}
             
@@ -259,39 +261,88 @@ def monitoramento_excel():
         per_page = request.args.get('limit', 20, type=int)
         busca_raw = request.args.get('q', '').strip()
         local_filtro = request.args.get('local', '').strip()
-        status_filtro = request.args.get('status', '').strip() # 👈 NOVO PARÂMETRO
-        
+        status_filtro = request.args.get('status', '').strip() 
+        busca_erp = request.args.get('erp', '').strip()
+        derivado_filtro = request.args.get('derivado', 'Todas').strip()
+        criador_filtro = request.args.get('criador', '').strip()
         busca = busca_raw.upper()
         offset = (page - 1) * per_page
 
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
 
+        # ... (Início da função monitoramento_excel) ...
+
         where_parts = ["1=1"]
         params_query = []
 
-        # Filtro de Local
+        # 🔥 AGORA COM UPPER E TRIM PARA NUNCA MAIS FALHAR!
         if local_filtro and local_filtro != 'Qualquer':
-            where_parts.append("AND a.local = %s")
+            where_parts.append("AND UPPER(TRIM(a.local)) = UPPER(TRIM(%s))")
             params_query.append(local_filtro)
 
-        # 👈 NOVO: Filtro de Status (Com ou Sem Resposta)
-        if status_filtro == 'Pendentes':
-            where_parts.append("AND r.status IS NULL")
-        elif status_filtro == 'Realizadas':
-            where_parts.append("AND r.status IS NOT NULL")
-            
+        # NOVA LÓGICA DE FILTRO POR STATUS DO PÁTIO (Mais limpa e direta)
+        if status_filtro == 'AGUARDANDO':
+            # Agrupa PENDENTE e ATRASADO. Se for NULL, consideramos como fila também.
+            where_parts.append("AND (a.status_patio IN ('PENDENTE', 'ATRASADO') OR a.status_patio IS NULL)")
+        elif status_filtro in ['VISTORIADO', 'CARREGANDO', 'CARREGADO', 'CANCELADO']:
+            # Se for um status exato, o banco filtra cirurgicamente
+            where_parts.append("AND a.status_patio = %s")
+            params_query.append(status_filtro)
+
+        if derivado_filtro == 'Sim':
+            where_parts.append("AND a.derivado = TRUE")
+        elif derivado_filtro == 'Nao':
+            where_parts.append("AND (a.derivado = FALSE OR a.derivado IS NULL)")
+
+        # 🔥 BLINDADO AQUI TAMBÉM (Para o filtro "Meus")
+        if criador_filtro:
+            where_parts.append("AND UPPER(TRIM(a.criado_por)) = UPPER(TRIM(%s))")
+            params_query.append(criador_filtro)
+
+        # 👇 BUSCA UNIFICADA INTELIGENTE 👇
         if busca:
-            termo = f"%{busca}%"
-            condicoes = [
+            termo_like = f"%{busca}%"
+            
+            # Lista de IDs encontrados no ERP (Começa vazia)
+            ids_via_erp = []
+
+            # 🧠 INTELIGÊNCIA: Só busca no ERP se for NÚMERO (evita travar buscando texto)
+            if busca.isdigit():
+                try:
+                    sql_erp = """
+                        SELECT DISTINCT a."PED_PRE_ORDEM"
+                        FROM "APEDIDOS" a 
+                        LEFT JOIN "AEMBARITE" b ON a."PED_NUMERO" = b."EMB_PEDIDO" AND a."PED_EMPRESA" = b."EMB_EMPRESA" 
+                        LEFT JOIN "AMOVPRI" c ON c."MV_PEDIDO" = a."PED_NUMERO" 
+                        WHERE a."PED_DT_PED" >= CURRENT_DATE - INTERVAL '12 months'
+                          AND (CAST(b."EMB_NUMERO" AS VARCHAR) = %s 
+                            OR CAST(c."MV_NOTA" AS VARCHAR) = %s)
+                    """
+                    # Usa uma conexão temporária ou cursor novo para não misturar
+                    cur.execute(sql_erp, (busca, busca))
+                    ids_via_erp = [str(r[0]).strip() for r in cur.fetchall() if r[0]]
+                except Exception as e:
+                    print(f"⚠️ Erro silencioso na busca ERP: {e}")
+
+            # Monta as Condições (SQL OR)
+            condicoes_or = [
                 "UPPER(a.placa) LIKE %s",
                 "UPPER(COALESCE(r.transportadora, '')) LIKE %s",
                 "UPPER(COALESCE(r.motorista, '')) LIKE %s",
                 "to_char(a.data, 'DD/MM/YYYY') LIKE %s",
-                "UPPER(a.pre_ordem1) LIKE %s"
+                "UPPER(a.pre_ordem1) LIKE %s" # Busca textual na pré-ordem
             ]
-            params_query.extend([termo] * 5)
-            where_parts.append(f"AND ({' OR '.join(condicoes)})")
+            # Adiciona os parâmetros para os campos de texto
+            params_query.extend([termo_like] * 5)
+
+            # Se o ERP achou algo, adiciona a condição de ID na lista de 'OR'
+            if ids_via_erp:
+                in_clause = "('" + "', '".join(ids_via_erp) + "')"
+                condicoes_or.append(f"(a.pre_ordem1 IN {in_clause} OR a.pre_ordem2 IN {in_clause} OR a.pre_ordem3 IN {in_clause} OR a.pre_ordem4 IN {in_clause} OR a.pre_ordem5 IN {in_clause})")
+            
+            # Fecha o parênteses do AND ( ... OR ... OR ... )
+            where_parts.append(f"AND ({' OR '.join(condicoes_or)})")
 
         where_final = "WHERE " + " ".join(where_parts)
 
@@ -305,6 +356,7 @@ def monitoramento_excel():
         total_items = cur.fetchone()[0]
         total_pages = (total_items + per_page - 1) // per_page
 
+        # 1. SQL DE BUSCA PRINCIPAL (Agora puxando o status_patio do banco)
         sql_dados = f"""
             SELECT
                 a.id, 
@@ -313,36 +365,33 @@ def monitoramento_excel():
                 COALESCE(to_char(r.vistoria_inicio, 'HH24:MI'), to_char(a.hr_inicio, 'HH24:MI')),
                 COALESCE(to_char(r.vistoria_fim, 'HH24:MI'), to_char(a.hr_fim, 'HH24:MI')),
                 
-                -- [5] 🔥 CORREÇÃO AQUI: PRÉ-ORDEM DIRETO DO AGENDAMENTO
-                -- Antes: COALESCE(r.nr_ordem, ...) -> Priorizava a resposta antiga
-                -- Agora: CONCAT_WS(...) -> Pega sempre o que está editado no Agendamento
                 CONCAT_WS(', ', 
                     NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''),
                     NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')
                 ),
                 
-                COALESCE(r.transportadora, y."TRP_NOME", 'Aguardando...'),
-                CASE WHEN r.status = 'Concluida' THEN 'SIM' WHEN r.status = 'Cancelada' THEN 'CANCELADO' ELSE 'NÃO' END,
+                COALESCE(r.transportadora, 
+                    (SELECT y2."TRP_NOME" 
+                     FROM "UTRAPLACA" x2 
+                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
+                     LIMIT 1), 
+                'Aguardando...'),
+                
+                r.status, -- [7] Status vindo da Vistoria (Concluida/Cancelada)
                 r.caminhao_liberado, r.motorista, r.vistoriador,
-                
-                -- [11] PDF ID (ID da Vistoria)
                 CASE WHEN r.pdf_documento IS NOT NULL THEN r.id ELSE NULL END,
-
-                -- [12] Duração
                 CAST(EXTRACT(EPOCH FROM (a.hr_fim - a.hr_inicio))/60 AS INTEGER),
+                a.local, a.pre_ordem1, a.pre_ordem2, a.pre_ordem3, a.pre_ordem4, a.pre_ordem5,
                 
-                -- [13-18] Campos Edição
-                a.local,
-                a.pre_ordem1,
-                a.pre_ordem2,
-                a.pre_ordem3,
-                a.pre_ordem4,
-                a.pre_ordem5
+                -- CAMPOS EXTRAS [19, 20, 21, 22]
+                a.data,
+                a.hr_inicio,
+                COALESCE(a.status_patio, 'PENDENTE'), -- [21]
+                COALESCE(a.criado_por, 'Desconhecido') -- [22] 🔥 Puxa quem criou
 
             FROM "vistoria"."VAGENDAMENTO" a
             LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
-            LEFT JOIN "UTRAPLACA" x ON REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g')
-            LEFT JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
             
             {where_final}
             
@@ -358,34 +407,106 @@ def monitoramento_excel():
         cur.execute(sql_dados, tuple(params_dados))
         rows = cur.fetchall()
 
-        # COLETA DE IDS PARA O ERP (OTIMIZADO)
         todas_pos = set()
         resultado_temp = []
+        cur_erp = conn.cursor()
+        agora = datetime.now()
         
         for r in rows:
-            # O índice r[5] agora contém os dados atualizados do Agendamento.
-            # O código abaixo vai usar esses dados novos para buscar no ERP.
             pos_str = r[5] 
             pos_list = []
             if pos_str:
-                # Separa por vírgula se houver mais de uma
                 for p in pos_str.replace('/',',').split(','):
                     if p.strip().isdigit():
                         todas_pos.add(p.strip())
                         pos_list.append(p.strip())
 
+            # ==============================================================
+            # 🔥 MÁQUINA DE ESTADOS (INTELIGÊNCIA QUE SE AUTO-ATUALIZA)
+            # ==============================================================
+            id_agend = r[0]
+            placa_limpa = r[1].upper().replace("-", "").strip() if r[1] else ""
+            status_resposta = r[7] # Vem da tabela de respostas (Vistoria)
+            data_agend = r[19]
+            hr_inicio = r[20]
+            status_salvo_banco = r[21] # O que está gravado na nova coluna do agendamento
+            
+            novo_status = status_salvo_banco
+
+            # Só pensa e gasta processador se o caminhão AINDA NÃO terminou a jornada
+            if status_salvo_banco not in ['CARREGADO', 'CANCELADO']:
+                
+                if status_resposta == 'Cancelada':
+                    novo_status = 'CANCELADO'
+                    
+                elif status_resposta == 'Concluida':
+                    # Se concluiu a vistoria mas no banco ainda tava pendente, avança pra Vistoriado
+                    if status_salvo_banco in ['PENDENTE', 'ATRASADO']:
+                        novo_status = 'VISTORIADO'
+                        
+                    data_erp = data_agend.strftime('%d/%m/%Y') if data_agend else ""
+                    
+                    # Se está Vistoriado, vamos ver no ERP se ele ENTROU NA DOCA (APLACPEN)
+                    if novo_status == 'VISTORIADO':
+                        hora_agendamento = r[20].strftime('%H:%M') if r[20] else "00:00"
+
+                        cur_erp.execute("""
+                            SELECT 1 FROM "APLACPEN" a
+                            LEFT JOIN "AOPERACAO" b ON a."PP_OPERACAO" = b."OPER_CODIGO" AND a."PP_EMPRESA" = b."OPER_EMPRESA"
+                            WHERE a."PP_PLACA" = %s 
+                            AND a."PP_DATA_E" = %s 
+                            AND b."OPER_DESCRICAO" = 'CARREGAMENTO'
+                            AND a."PP_HORA" >= CAST(%s AS time)
+                            LIMIT 1
+                        """, (placa_limpa, data_erp, hora_agendamento))
+                        
+                        # 🔥 CORREÇÃO: O fetchone() tem que estar dentro deste IF
+                        if cur_erp.fetchone():
+                            novo_status = 'CARREGANDO'
+
+                    # Se já bateu na doca (ou se acabou de virar CARREGANDO acima), vamos ver se SAIU (AMOVPRI)
+                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                        cur_erp.execute("""
+                            SELECT 1 FROM "AMOVPRI" a
+                            LEFT JOIN "AMOVTRA" b on b."MV_EMPRESA" = a."MV_EMPRESA" and b."MV_LOCAL" = a."MV_LOCAL" and b."MV_NOTA" = a."MV_NOTA"
+                            LEFT JOIN "AMOVITE" c on c."MV_EMPRESA" = a."MV_EMPRESA" and c."MV_LOCAL" = a."MV_LOCAL" and c."MV_NOTA" = a."MV_NOTA"
+                            LEFT JOIN "AOPERACAO" d ON c."MV_OPERACAO" = d."OPER_CODIGO" AND c."MV_EMPRESA" = d."OPER_EMPRESA"
+                            WHERE b."MV_PLACA1" = %s AND a."MV_DT_ENT_SAI" = %s AND a."MV_SERIE" = 'ROM' AND d."OPER_DESCRICAO" = 'CARREGAMENTO'
+                            LIMIT 1
+                        """, (placa_limpa, data_erp))
+                        
+                        if cur_erp.fetchone():
+                            novo_status = 'CARREGADO'
+
+                else:
+                    # Se não tem resposta da vistoria, avalia o atraso
+                    if data_agend and hr_inicio:
+                        dt_hr_agendamento = datetime.combine(data_agend, hr_inicio)
+                        if agora > dt_hr_agendamento:
+                            novo_status = 'ATRASADO'
+                        else:
+                            novo_status = 'PENDENTE'
+
+                # 💾 SALVANDO NO BANCO: Se o Python descobriu que o status mudou, ele grava!
+                if novo_status != status_salvo_banco:
+                    cur_update = conn.cursor()
+                    cur_update.execute('UPDATE "vistoria"."VAGENDAMENTO" SET status_patio = %s WHERE id = %s', (novo_status, id_agend))
+                    conn.commit()
+                    cur_update.close()
+            # ==============================================================
+
             resultado_temp.append({
                 "id": r[0], "placa": r[1], "data": r[2], "h_inicio": r[3], "h_fim": r[4],
-                "pre_ordem": r[5], "transportadora": r[6], "vistoria_realizada": r[7],
+                "pre_ordem": r[5], "transportadora": r[6], 
+                "vistoria_realizada": novo_status, 
                 "liberado": r[8], "motorista": r[9], "vistoriador": r[10], 
-                "pdf": r[11],
-                "tem_pdf": r[11], # Mantém compatibilidade
-                
-                "pos_ids": pos_list, # Lista de IDs para cruzar com o ERP abaixo
-
+                "pdf": r[11], "tem_pdf": r[11], "pos_ids": pos_list, 
                 "duracao": r[12], "local": r[13],
-                "pre_ordem1": r[14], "pre_ordem2": r[15], "pre_ordem3": r[16], "pre_ordem4": r[17], "pre_ordem5": r[18]
+                "pre_ordem1": r[14], "pre_ordem2": r[15], "pre_ordem3": r[16], "pre_ordem4": r[17], "pre_ordem5": r[18],
+                "criado_por": r[22] # 🔥 Manda para o Frontend
             })
+
+        # ... (O código abaixo que cruza info_erp continua exatamente igual) ...
 
         # BUSCA ÚNICA NO ERP (SEM LOOP DE API)
         info_erp = {}
@@ -516,38 +637,59 @@ def get_detalhes_vistoria(id_agendamento):
                 SELECT a."PED_PRE_ORDEM", a."PED_NUMERO", b."EMB_NUMERO", c."MV_NOTA"
                 FROM "APEDIDOS" a
                 LEFT JOIN "AEMBARITE" b ON a."PED_NUMERO" = b."EMB_PEDIDO" AND a."PED_EMPRESA" = b."EMB_EMPRESA"
-                LEFT JOIN "AMOVPRI" c ON c."MV_PEDIDO" = a."PED_NUMERO"
+                -- 🔥 CORREÇÃO 1: A trava do status 'C' (Cancelado) subiu para o JOIN. 
+                -- Assim ele não "mata" as pré-ordens que ainda não tem nota!
+                LEFT JOIN "AMOVPRI" c ON c."MV_PEDIDO" = a."PED_NUMERO" AND c."MV_STATUS" != 'C'
                 WHERE a."PED_PRE_ORDEM" IN %s
             """, (tuple(lista_pre_ordens),))
             
             temp_dict = {}
             for po, ped, emb, nota in cur.fetchall():
-                # Chave única para agrupar notas do mesmo pedido/embarque
-                key = (str(po), str(ped), str(emb))
+                # 🔥 CORREÇÃO 2: Se não tem pedido ou embarque ainda, vira um tracinho "-"
+                po_str = str(po).strip() if po else "-"
+                ped_str = str(ped).strip() if ped else "-"
+                emb_str = str(emb).strip() if emb else "-"
+                
+                key = (po_str, ped_str, emb_str)
                 if key not in temp_dict: temp_dict[key] = []
-                if nota: temp_dict[key].append(str(nota))
+                if nota: temp_dict[key].append(str(nota).strip())
 
+            processados_po = set()
             for (po, ped, emb), notas in temp_dict.items():
+                processados_po.add(po)
                 dados_emitidos.append({
                     "pre_ordem": po, 
                     "pedido": ped, 
                     "embarque": emb, 
                     "notas": " / ".join(notas) if notas else "-"
                 })
+                
+            # 🔥 CORREÇÃO 3: Se a Pré-Ordem existe no agendamento mas AINDA NÃO FOI DIGITADA no ERP (APEDIDOS),
+            # forçamos ela a aparecer na tela aguardando os próximos passos!
+            for po in lista_pre_ordens:
+                if po not in processados_po:
+                    dados_emitidos.append({
+                        "pre_ordem": po, 
+                        "pedido": "-", 
+                        "embarque": "-", 
+                        "notas": "-"
+                    })
 
-            # 2. Busca Produtos (Agrupados)
+            # 2. Busca Produtos e Paletes (Agrupados)
             cur.execute("""
-                SELECT z."PRD_DESC_RES", SUM(y."PED_QUANT"), z."PRD_UNID"
+                SELECT z."PRD_DESC_RES", SUM(y."PED_QUANT"), z."PRD_UNID", COALESCE(s."PLT_DESC_TIPO", 'BAT')
                 FROM "APEDIDOS" x
                 JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                 JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
                 WHERE x."PED_PRE_ORDEM" IN %s
-                GROUP BY z."PRD_DESC_RES", z."PRD_UNID"
+                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
             """, (tuple(lista_pre_ordens),))
             
-            for prd_nome, qtd, unid in cur.fetchall():
-                unid_fmt = "FD30" if str(unid).strip().upper() == 'FD' else str(unid).strip()
-                produtos_reais.append(f"{prd_nome.strip()} - {int(qtd)} {unid_fmt}")
+            for prd_nome, qtd, unid, palete in cur.fetchall():
+                unid_fmt = "FD" if str(unid).strip().upper() == 'FD' else str(unid).strip()
+                # 🔥 A MÁGICA AQUI: O palete agora é concatenado direto no texto final!
+                produtos_reais.append(f"{prd_nome.strip()} - {int(qtd)} {unid_fmt} ({palete})")
 
         # Se não achou produto no ERP, tenta usar o manual da vistoria (row[18])
         produto_final = " / ".join(produtos_reais) if produtos_reais else (row[18] or "-")
@@ -652,6 +794,8 @@ def get_foto_banco(id_agendamento, tipo):
         if conn: conn.close()
 
         
+# No arquivo: historico.a.py
+
 @app.route('/verificar-duplicidade', methods=['GET'])
 def verificar_duplicidade():
     conn = None
@@ -659,23 +803,24 @@ def verificar_duplicidade():
         placa = request.args.get('placa')
         data = request.args.get('data')
         ordem = request.args.get('ordem') # Primeira ordem
+        local = request.args.get('local') # <--- NOVO PARÂMETRO
 
         # Se faltar dados básicos, deixa passar (o frontend já valida antes)
-        if not all([placa, data, ordem]):
+        if not all([placa, data, ordem, local]):
             return jsonify({"duplicado": False})
 
-        # 🔥 ALTERAÇÃO: Conecta no DB_BUSCA
+        # Conecta no DB_BUSCA
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
 
-        # Verifica duplicidade IGNORANDO A HORA (a.hr_inicio)
-        # Regra: Mesma Placa + Mesmo Dia + Mesma Ordem Principal
+        # Verifica duplicidade considerando PLACA + DATA + ORDEM + LOCAL
         sql = """
             SELECT 1 
             FROM "vistoria"."VAGENDAMENTO" a
             WHERE a.placa = %s 
             AND a.data = %s 
             AND a.pre_ordem1 = %s
+            AND a.local = %s  -- <--- NOVA VALIDAÇÃO
             AND NOT EXISTS (
                 SELECT 1 FROM "vistoria"."VRESPOSTAS" r 
                 WHERE CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR) 
@@ -684,7 +829,7 @@ def verificar_duplicidade():
             LIMIT 1
         """
         
-        cur.execute(sql, (placa, data, ordem))
+        cur.execute(sql, (placa, data, ordem, local))
         existe = cur.fetchone()
 
         return jsonify({"duplicado": bool(existe)})
@@ -692,6 +837,312 @@ def verificar_duplicidade():
     except Exception as e:
         print(f"❌ Erro verificação duplicidade: {e}")
         return jsonify({"duplicado": False}), 200 
+    finally:
+        if conn: conn.close()
+
+@app.route('/dashboard-carga', methods=['GET'])
+def dashboard_carga():
+    conn = None
+    try:
+        # 1. Pega as variáveis que vieram da URL
+        data_filtro = request.args.get('data', datetime.now().strftime('%Y-%m-%d'))
+        local_filtro = request.args.get('local', 'Qualquer').strip()
+        derivado_filtro = request.args.get('derivado', 'Todas').strip()
+        
+        conn = psycopg2.connect(**DB_BUSCA)
+        cur = conn.cursor()
+        cur_erp = conn.cursor()
+
+        # ====================================================================
+        # 🔥 CONSTRUÇÃO DAS CONDIÇÕES DA BUSCA (SQL WHERE)
+        # ====================================================================
+        where_parts = [
+            "a.data = %s", 
+            "a.status_patio != 'CANCELADO'",
+            # Oculta do Carregamento se NÃO tiver nenhuma P.O preenchida
+            """
+            (TRIM(COALESCE(a.pre_ordem1, '')) != '' OR 
+             TRIM(COALESCE(a.pre_ordem2, '')) != '' OR 
+             TRIM(COALESCE(a.pre_ordem3, '')) != '' OR 
+             TRIM(COALESCE(a.pre_ordem4, '')) != '' OR 
+             TRIM(COALESCE(a.pre_ordem5, '')) != '')
+            """
+        ]
+        params_query = [data_filtro]
+
+        if local_filtro and local_filtro != 'Qualquer':
+            where_parts.append("""
+                (
+                  (r.status = 'Concluida' AND UPPER(TRIM(COALESCE(NULLIF(r.local_filial, ''), a.local))) = UPPER(TRIM(%s)))
+                  OR
+                  ((r.status IS NULL OR r.status != 'Concluida') AND UPPER(TRIM(a.local)) = UPPER(TRIM(%s)))
+                )
+            """)
+            params_query.extend([local_filtro, local_filtro])
+
+        if derivado_filtro == 'Sim':
+            where_parts.append("a.derivado = TRUE")
+        elif derivado_filtro == 'Nao':
+            where_parts.append("(a.derivado = FALSE OR a.derivado IS NULL)")
+
+        where_clause = " AND ".join(where_parts)
+
+        # ====================================================================
+        # 🔥 1. BUSCA TODOS OS AGENDAMENTOS DO DIA (SQL PRINCIPAL)
+        # ====================================================================
+        sql_agendamentos = f"""
+            SELECT 
+                a.id, a.placa, a.hr_inicio, 
+                COALESCE(r.transportadora, 
+                    (SELECT y2."TRP_NOME" FROM "UTRAPLACA" x2 JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') LIMIT 1), 
+                'NÃO IDENTIFICADA') as transp,
+                a.pre_ordem1, a.pre_ordem2, a.pre_ordem3, a.pre_ordem4, a.pre_ordem5,
+                r.status, COALESCE(a.status_patio, 'PENDENTE'), a.data,
+                r.vistoria_fim,
+                a.hr_fim, a.local 
+            FROM "vistoria"."VAGENDAMENTO" a
+            LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
+            WHERE {where_clause}
+            ORDER BY a.hr_inicio ASC
+        """
+        cur.execute(sql_agendamentos, tuple(params_query))
+        agendamentos_do_dia = cur.fetchall()
+
+        # ====================================================================
+        # 🔥 2. OTIMIZAÇÃO EXTREMA: BUSCAS NO ERP EM LOTE (BULK QUERY)
+        # ====================================================================
+        placas_hoje = [r[1].upper().replace("-", "").strip() for r in agendamentos_do_dia if r[1]]
+        todas_pos_iniciais = set()
+        for row in agendamentos_do_dia:
+            for p in row[4:9]: 
+                if p and str(p).strip(): todas_pos_iniciais.add(str(p).strip())
+
+        patio_cache = {}
+        saida_cache = {}
+        mapa_embarques = {}
+
+        if placas_hoje:
+            data_erp = datetime.strptime(data_filtro, '%Y-%m-%d').strftime('%d/%m/%Y')
+            placas_tuple = tuple(placas_hoje)
+            
+            # CACHE 1: Quem bateu na Doca hoje?
+            cur_erp.execute("""
+                SELECT a."PP_PLACA", a."PP_HORA" 
+                FROM "APLACPEN" a
+                LEFT JOIN "AOPERACAO" b ON a."PP_OPERACAO" = b."OPER_CODIGO" AND a."PP_EMPRESA" = b."OPER_EMPRESA"
+                WHERE a."PP_DATA_E" = %s AND b."OPER_DESCRICAO" = 'CARREGAMENTO' AND a."PP_PLACA" IN %s
+            """, (data_erp, placas_tuple))
+            for row_erp in cur_erp.fetchall(): 
+                p_erp, h_erp = row_erp[0], row_erp[1]
+                if p_erp not in patio_cache: patio_cache[p_erp] = []
+                patio_cache[p_erp].append(h_erp)
+            
+            # CACHE 2: Quem emitiu Nota Fiscal de Saída hoje?
+            cur_erp.execute("""
+                SELECT b."MV_PLACA1", a."MV_DTH_LANC"::TIME
+                FROM "AMOVPRI" a
+                LEFT JOIN "AMOVTRA" b on b."MV_EMPRESA" = a."MV_EMPRESA" and b."MV_LOCAL" = a."MV_LOCAL" and b."MV_NOTA" = a."MV_NOTA"
+                LEFT JOIN "AMOVITE" c on c."MV_EMPRESA" = a."MV_EMPRESA" and c."MV_LOCAL" = a."MV_LOCAL" and c."MV_NOTA" = a."MV_NOTA"
+                LEFT JOIN "AOPERACAO" d ON c."MV_OPERACAO" = d."OPER_CODIGO" AND c."MV_EMPRESA" = d."OPER_EMPRESA"
+                WHERE a."MV_DT_ENT_SAI" = %s AND a."MV_SERIE" = 'ROM' AND d."OPER_DESCRICAO" = 'CARREGAMENTO'
+                AND b."MV_PLACA1" IN %s
+            """, (data_erp, placas_tuple))
+            for row_erp in cur_erp.fetchall():
+                p_erp, h_saida = row_erp[0], row_erp[1]
+                if p_erp not in saida_cache: saida_cache[p_erp] = []
+                saida_cache[p_erp].append(h_saida)
+
+        # CACHE 3: Embarques emitidos pela Expedição (Fura-Filas)
+        if todas_pos_iniciais:
+            cur_erp.execute("""
+                SELECT CAST(a."PED_PRE_ORDEM" AS VARCHAR), b."EMB_NUMERO"
+                FROM "APEDIDOS" a
+                JOIN "AEMBARITE" b ON a."PED_NUMERO" = b."EMB_PEDIDO" AND a."PED_EMPRESA" = b."EMB_EMPRESA"
+                WHERE a."PED_PRE_ORDEM" IN %s AND b."EMB_NUMERO" IS NOT NULL
+            """, (tuple(todas_pos_iniciais),))
+            for po, emb in cur_erp.fetchall():
+                if po not in mapa_embarques: mapa_embarques[po] = set()
+                mapa_embarques[po].add(str(emb))
+
+        # ====================================================================
+        # 🔥 3. RODA A MÁQUINA DE ESTADOS E MONTA A TELA
+        # ====================================================================
+        todas_pre_ordens = set()
+        fila_caminhoes = []
+        caminhoes_concluidos = 0
+        caminhoes_liberados = 0
+        agendados_hoje = len(agendamentos_do_dia)
+        agora = datetime.now()
+
+        for row in agendamentos_do_dia:
+            id_agend, placa, hr_inicio, transp, p1, p2, p3, p4, p5, status_resp, status_patio, data_agend, vistoria_fim = row[:13]
+            hr_fim, local_agend = row[13], row[14]
+            
+            novo_status = status_patio
+            placa_limpa = placa.upper().replace("-", "").strip() if placa else ""
+            
+            hora_exibicao = str(hr_inicio)[:5] if hr_inicio else "--:--"
+            texto_hora = "Agendado:"
+
+            # Descobre o Status Real do Camião
+            if status_patio not in ['CARREGADO', 'CANCELADO']:
+                if status_resp == 'Cancelada':
+                    novo_status = 'CANCELADO'
+                elif status_resp == 'Concluida':
+                    if status_patio in ['PENDENTE', 'ATRASADO']:
+                        novo_status = 'VISTORIADO'
+                    
+                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                        if vistoria_fim:
+                            hora_exibicao = vistoria_fim.strftime('%H:%M')
+                            texto_hora = "Vistoriado:"
+
+                        # Trava da Doca: Usa a hora do término da vistoria como limite
+                        limite_doca = vistoria_fim.time() if vistoria_fim else hr_inicio
+                        if placa_limpa in patio_cache and limite_doca:
+                            horas_validas = [h for h in patio_cache[placa_limpa] if h >= limite_doca]
+                            if horas_validas:
+                                novo_status = 'CARREGANDO'
+                                hora_exibicao = str(min(horas_validas))[:5] 
+                                texto_hora = "Na Doca:"
+
+                    # Trava da Saída: Usa a hora do término da vistoria como limite
+                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                        limite_saida = vistoria_fim.time() if vistoria_fim else hr_inicio
+                        if placa_limpa in saida_cache and limite_saida:
+                            saidas_validas = [h for h in saida_cache[placa_limpa] if h >= limite_saida]
+                            if saidas_validas:
+                                novo_status = 'CARREGADO'
+                else:
+                    if data_agend and hr_inicio:
+                        dt_hr = datetime.combine(data_agend, hr_inicio)
+                        novo_status = 'ATRASADO' if agora > dt_hr else 'PENDENTE'
+                        if novo_status == 'ATRASADO': texto_hora = "Atrasado:"
+
+                # Grava no banco se o status mudou sozinho
+                if novo_status != status_patio:
+                    cur_update = conn.cursor()
+                    cur_update.execute('UPDATE "vistoria"."VAGENDAMENTO" SET status_patio = %s WHERE id = %s', (novo_status, id_agend))
+                    conn.commit()
+                    cur_update.close()
+
+            # Contabiliza Estatísticas
+            if novo_status == 'CARREGADO':
+                caminhoes_concluidos += 1
+            elif novo_status in ['VISTORIADO', 'CARREGANDO']:
+                caminhoes_liberados += 1
+            
+            # Adiciona na Fila da Tela (Apenas os que interessam)
+            if novo_status not in ['CARREGADO', 'CANCELADO']:
+                ordens_limpas = [str(p).strip() for p in [p1, p2, p3, p4, p5] if p and str(p).strip()]
+                for o in ordens_limpas: todas_pre_ordens.add(o)
+                
+                embarques_deste_caminhao = set()
+                for o in ordens_limpas:
+                    if o in mapa_embarques: embarques_deste_caminhao.update(mapa_embarques[o])
+                        
+                tem_emb = len(embarques_deste_caminhao) > 0 
+                
+                if tem_emb:
+                    texto_documento = "Emb: " + " / ".join(sorted(embarques_deste_caminhao))
+                elif ordens_limpas:
+                    texto_documento = "P.O: " + " / ".join(ordens_limpas)
+                else:
+                    texto_documento = "Sem Ordem"
+                
+                fila_caminhoes.append({
+                    "id": id_agend,
+                    "placa": placa, 
+                    "transportadora": transp, 
+                    "hora": hora_exibicao,
+                    "texto_hora": texto_hora, 
+                    "status": novo_status,
+                    "ordens_resumo": texto_documento,
+                    "tem_embarque": tem_emb,
+                    "data": data_agend.strftime('%d/%m/%Y') if data_agend else "",
+                    "h_inicio": str(hr_inicio)[:5] if hr_inicio else "--:--",
+                    "h_fim": str(hr_fim)[:5] if hr_fim else "--:--",
+                    "local": local_agend or "Matriz"
+                })
+
+        # ====================================================================
+        # 🔥 4. BUSCA OS PRODUTOS PARA SEPARAR (MATEMÁTICA DE PALETES)
+        # ====================================================================
+        resumo_produtos = []
+        total_fardos = 0
+
+        if todas_pre_ordens:
+            sql_produtos = """
+                SELECT z."PRD_DESC_RES", SUM(y."PED_QUANT") as quantidade_total, z."PRD_UNID", COALESCE(s."PLT_DESC_TIPO", 'BAT') as tipo_palete
+                FROM "APEDIDOS" x
+                JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
+                WHERE x."PED_PRE_ORDEM" IN %s
+                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
+                ORDER BY quantidade_total DESC
+            """
+            cur.execute(sql_produtos, (tuple(todas_pre_ordens),))
+            for rp in cur.fetchall():
+                desc = rp[0].strip() if rp[0] else "PRODUTO SEM NOME"
+                qtd = float(rp[1]) if rp[1] is not None else 0
+                unidade = str(rp[2]).strip().upper() if rp[2] else ""
+                palete = str(rp[3]).strip().upper() 
+
+                total_fardos += qtd
+                
+                qtd_paletes = None
+                if palete in ['PBR', 'CHEP', 'CHEPC']:
+                    divisor = None
+                    desc_upper = desc.upper()
+                    
+                    if "6X5" in desc_upper: divisor = 36
+                    elif "10X1" in desc_upper: divisor = 100
+                    elif "5X2" in desc_upper: divisor = 104
+                        
+                    if divisor and (qtd % divisor == 0):
+                        qtd_paletes = int(qtd / divisor)
+
+                resumo_produtos.append({
+                    "nome": desc,
+                    "quantidade": int(qtd) if qtd % 1 == 0 else round(qtd, 2),
+                    "qtd_paletes": qtd_paletes, 
+                    "unidade": unidade, 
+                    "palete": palete
+                })
+
+        # ====================================================================
+        # 🔥 5. ORDENAÇÃO INTELIGENTE (FURA-FILAS)
+        # ====================================================================
+        def peso_fila(x):
+            st = x['status']
+            emb = x['tem_embarque']
+            
+            if st == 'CARREGANDO': return 1                 
+            if st == 'VISTORIADO' and emb: return 2         
+            if st == 'VISTORIADO' and not emb: return 3     
+            if st == 'ATRASADO': return 4                   
+            if st == 'PENDENTE': return 5                   
+            return 6
+            
+        fila_caminhoes.sort(key=lambda x: (peso_fila(x), x['hora']))
+
+        return jsonify({
+            "stats": {
+                "agendadosHoje": agendados_hoje,
+                "caminhoesLiberados": caminhoes_liberados,
+                "cargasConcluidas": caminhoes_concluidos,
+                "totalFardos": int(total_fardos),
+                "totalMix": len(resumo_produtos) 
+            },
+            "resumoProdutos": resumo_produtos,
+            "filaCaminhoes": fila_caminhoes
+        }), 200
+
+    except Exception as e:
+        print(f"❌ Erro no Dashboard de Carga: {e}")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
 

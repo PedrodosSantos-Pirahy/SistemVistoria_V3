@@ -6,6 +6,7 @@ import { HistoricoComponent } from './components/historico/historico.component';
 import { AgendamentoComponent } from './components/agend/agendamento.component';
 import { MonitoramentoComponent } from './components/monitoramento/monitoramento.component';
 import { LoginComponent } from './components/login/login.component';
+import { CarregamentoComponent } from './components/carregamento/carregamento.component';
 
 @Component({
   selector: 'app-root',
@@ -17,7 +18,8 @@ import { LoginComponent } from './components/login/login.component';
     HistoricoComponent,
     AgendamentoComponent,
     MonitoramentoComponent,
-    LoginComponent
+    LoginComponent,
+    CarregamentoComponent
   ],
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,8 +28,9 @@ export class AppComponent implements OnInit {
 
   isLogado = signal(false);
   
+  // Adicionamos 'carregamento' na lista de telas permitidas
+  readonly view = signal<'list' | 'form' | 'historico' | 'agendamento' | 'monitoramento' | 'carregamento' | null>(null);
   readonly selectedInspection = signal<{ placa: string; id: string } | null>(null);
-  readonly view = signal<'list' | 'form' | 'historico' | 'agendamento' | 'monitoramento' | null>(null);
   
   usuarioNome = signal('');
   usuarioCargo = signal('');
@@ -38,6 +41,7 @@ export class AppComponent implements OnInit {
   isExpedicao = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
   isVistoriador = computed(() => this.usuarioCargo() === 'VIS' || this.isAdmin());
   isCarregamento = computed(() => this.usuarioCargo() === 'CAR' || this.isAdmin());
+  podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento());
   
   // ✨ NOVO: Permissão para Balança (BAL)
   isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
@@ -57,12 +61,13 @@ export class AppComponent implements OnInit {
 
       const cargo = this.usuarioCargo();
       
-      // 🔥 ATUALIZADO: Se for BAL, também vai direto pro Monitoramento ao logar
-      if (cargo === 'EXP' || cargo === 'CAR' || cargo === 'BAL') {
-        this.view.set('monitoramento');
+      // 🔥 ATUALIZADO: Regras de redirecionamento no Login
+      if (cargo === 'CAR') {
+        this.view.set('carregamento'); // Carregamento cai DIRETRO no Dashboard
+      } else if (cargo === 'EXP' || cargo === 'BAL') {
+        this.view.set('monitoramento'); // Expedição e Balança caem no Monitoramento
       } else {
-        // Vistoriadores e Admins começam no Painel
-        this.view.set('list');
+        this.view.set('list'); // Vistoriadores e ADMs começam no Painel
       }
 
     } else {
@@ -88,9 +93,10 @@ export class AppComponent implements OnInit {
 
   goBack(): void {
     this.selectedInspection.set(null);
-    // 🔥 ATUALIZADO: Balança também volta pro monitoramento ao sair de um detalhe
     if (this.isVistoriador()) {
       this.view.set('list');
+    } else if (this.isCarregamento()) {
+      this.view.set('carregamento'); // 🔥 Volta para o painel de carga
     } else {
       this.view.set('monitoramento'); 
     }

@@ -46,6 +46,16 @@ export class MonitoramentoComponent implements OnInit {
   showCancelModal = signal(false);
   motivoCancelamento = signal('');
   usuarioNomeLogado = ''; // Variável simples para o nome fixo
+  
+// 🔒 CONTROLE DE ACESSO
+  isTI = signal(false); // signal para permissão
+  isCarregamento = signal(false); // Permissão para o pessoal do pátio
+  isExpedicao = signal(false); // 🔥 NOVO: Permissão para a expedição/balança
+
+  // 📝 LOG E JUSTIFICATIVA
+  modalJustificativaAberto = signal(false);
+  justificativaEdicao = signal('');
+
 
 pdfUrlSegura = computed(() => {
     const item = this.itemSelecionado();
@@ -76,35 +86,93 @@ constructor() {
   });
 }
 readonly tipoLocal = signal<'Qualquer' | 'Matriz' | 'Filial'>('Qualquer');
-readonly tipoStatus = signal<'Todas' | 'Pendentes' | 'Realizadas'>('Todas');
+readonly tipoStatus = signal<string>('Todas');
+readonly tipoDerivado = signal<'Todas' | 'Sim' | 'Nao'>('Todas');
+readonly somenteMeus = signal(false);
+
+// Variável que controla se o usuário quer limpar as ordens de propósito
+  desvincularOrdens = signal(false);
+
+  // Função que limpa as ordens quando o usuário marca a caixinha
+  toggleDesvincular(marcado: boolean) {
+      this.desvincularOrdens.set(marcado);
+      if (marcado) {
+          // Limpa todas as 5 caixinhas de ordem
+          this.formEdicao.update(atual => ({ ...atual, pre_ordens: ['', '', '', '', ''] }));
+      }
+  }
+
 ngOnInit() {
-    // 2. Configura o filtro baseado no usuário logado
-    const dados = localStorage.getItem('usuario_logado');
-    if (dados) {
-        const user = JSON.parse(dados);
-        this.usuarioNomeLogado = user.nome;
-        if (user.local && (user.local === 'Matriz' || user.local === 'Filial')) {
-            this.tipoLocal.set(user.local);
+    // 1. Tenta buscar nas duas chaves possíveis para não ter erro
+    const dadosBrutos = localStorage.getItem('usuario_logado') || localStorage.getItem('user');
+    
+    if (dadosBrutos) {
+        try {
+            const user = JSON.parse(dadosBrutos);
+            console.log("MEU CARGO NO SISTEMA:", user.cargo);
+            this.usuarioNomeLogado = user.nome || 'Usuário TI';
+
+            const localUser = (user.local || '').trim().toUpperCase();
+            if (localUser === 'MATRIZ') {
+                this.tipoLocal.set('Matriz');
+            } else if (localUser === 'FILIAL') {
+                this.tipoLocal.set('Filial');
+            }
+            // 🔍 LOG DE DEPURAÇÃO: Abra o F12 no navegador e veja o que aparece aqui
+            console.log('Dados do usuário logado:', user);
+
+            // 🔒 Verificação flexível de Cargos
+            const cargo = (user.cargo || '').trim().toUpperCase();
+            const depto = (user.departamento || '').trim().toUpperCase();
+
+            // 1. TI e ADM (Veem TUDO: Carga + Edição)
+            if (['TI', 'ADM'].includes(cargo) || depto === 'TI') {
+                console.log('✅ Acesso TI/ADM detectado!');
+                this.isTI.set(true);
+            } 
+            // 2. Carregamento (Vê APENAS a coluna de Carga)
+            else if (['CAR', 'CARREGAMENTO', 'PATIO', 'CONFERENTE'].includes(cargo)) {
+                console.log('📦 Acesso Carregamento detectado!');
+                this.isCarregamento.set(true);
+            } 
+            // 3. Expedição e Balança (Veem APENAS a coluna de Edição)
+            else if (['EXP', 'EXPEDIÇÃO', 'BAL', 'BALANÇA'].includes(cargo)) {
+                console.log('🚛 Acesso Expedição detectado!');
+                this.isExpedicao.set(true);
+            }
+        } catch (e) {
+            console.error('Erro ao ler dados do localStorage', e);
         }
     }
+    
     this.carregarDados();
     setInterval(() => this.carregarDados(), 45000);
 }
+
+
+isSearchingErp = signal(false);
+
+
+// 2. Atualize o carregarDados para enviar sempre vazio no último parâmetro
 carregarDados() {
     const page = this.paginaAtual();
     const limit = this.itensPorPagina();
-    const busca = this.filtroGeral();
-    const local = this.tipoLocal(); // 👈 Pega o valor do sinal
+    const busca = this.filtroGeral(); // Pega o texto da caixa única
+    const local = this.tipoLocal(); 
     const status = this.tipoStatus();
+    const derivado = this.tipoDerivado();
+    const criador = this.somenteMeus() ? this.usuarioNomeLogado : '';
 
-    if (!busca) this.loading.set(true);
+    this.loading.set(true); // Liga o loading simples
 
-    this.apiService.getMonitoramento(page, limit, busca, local, status).subscribe({
+    // Passamos 'busca' no 'q' e deixamos o 'erp' (último) vazio ''
+    this.apiService.getMonitoramento(page, limit, busca, local, status, '', derivado, criador).subscribe({
         next: (res) => {
             this.dadosTabela.set(res.data);
             if (res.meta) {
-                this.totalItens.set(res.meta.total_items);
-                this.totalPaginas.set(res.meta.total_pages);
+                this.totalItens.set(res.meta.total_items || 0);
+                // 🔥 CORREÇÃO DA TABULAÇÃO: Garante que nunca seja página 0, evitando travar os botões
+                this.totalPaginas.set(res.meta.total_pages || 1); 
             }
             this.loading.set(false);
         },
@@ -113,6 +181,64 @@ carregarDados() {
 }
 // No arquivo: monitoramento.component.ts
 
+// 1. Adicione este método novo para a PLACA
+updatePlacaEdicao(valor: string) {
+  // Remove tudo que não é letra ou número e deixa maiúsculo
+  let limpa = valor.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  
+  // Limita a 7 caracteres (padrão Mercosul/Antigo sem contar hífen)
+  if (limpa.length > 7) limpa = limpa.slice(0, 7);
+
+  // Adiciona o hífen visualmente após o 3º caractere
+  if (limpa.length > 3) {
+      limpa = limpa.slice(0, 3) + '-' + limpa.slice(3);
+  }
+
+  this.formEdicao.update(atual => ({ ...atual, placa: limpa }));
+}
+
+// 2. Substitua o método updatePreOrdemEdicao por este (validando números)
+updatePreOrdemEdicao(index: number, valor: string) {
+  // Remove qualquer caractere que NÃO seja número
+  let numeros = valor.replace(/\D/g, '');
+  
+  // Trava em 6 dígitos (regra do ERP)
+  if (numeros.length > 6) numeros = numeros.slice(0, 6);
+
+  this.formEdicao.update(atual => {
+    const novas = [...atual.pre_ordens];
+    novas[index] = numeros;
+    return { ...atual, pre_ordens: novas };
+  });
+}
+
+// 3. (Opcional) Melhore o salvarEdicao para validar antes de enviar
+salvarEdicao() {
+    const dados = this.formEdicao();
+    
+    // Validação Placa
+    if (dados.placa.length < 8) {
+        alert('A placa deve estar completa (Ex: AAA-1234).');
+        return;
+    }
+
+    // Validação Ordens
+    const temOrdemValida = dados.pre_ordens.some(o => o.length > 0);
+    if (!temOrdemValida) {
+        alert('Informe pelo menos uma Ordem de Carregamento.');
+        return;
+    }
+
+    // Código de envio real (sem os pontinhos ...)
+    this.apiService.gerenciarAgendamento(this.formEdicao()).subscribe({
+        next: () => {
+          this.modalEdicaoAberto.set(false);
+          this.carregarDados();
+          alert('✅ Agendamento atualizado!');
+        },
+        error: (err) => alert(err.error?.error || 'Erro ao atualizar')
+    });
+}
 // Função genérica para atualizar campos simples (placa, duração, etc)
 updateEdicao(campo: string, valor: any) {
   this.formEdicao.update(atual => ({ ...atual, [campo]: valor }));
@@ -123,19 +249,17 @@ setLocalEdicao(local: string) {
   this.formEdicao.update(atual => ({ ...atual, local: local, hora: '' }));
 }
 
-// Função para atualizar uma ordem específica dentro do array
-updatePreOrdemEdicao(index: number, valor: string) {
-  this.formEdicao.update(atual => {
-    const novas = [...atual.pre_ordens];
-    novas[index] = valor;
-    return { ...atual, pre_ordens: novas };
-  });
-}
-  // --- AÇÕES PRINCIPAIS ---
 
-setStatus(status: 'Todas' | 'Pendentes' | 'Realizadas') {
-    this.tipoStatus.set(status);
+  // --- AÇÕES PRINCIPAIS ---
+setSomenteMeus(valor: boolean) {
+    this.somenteMeus.set(valor);
     this.paginaAtual.set(1);
+    this.carregarDados();
+}
+
+setStatus(status: string) {
+    this.tipoStatus.set(status);
+    this.paginaAtual.set(1); // Sempre volta para a página 1 ao filtrar
     this.carregarDados();
 }
 
@@ -177,19 +301,40 @@ carregarDetalhes(id: string) {
       });
   }
 
-  // 🔥 2. GERADOR DE URL (Fica igual, mas agora recebe o timestamp certo)
-getFotoUrl(tipo: string): string { 
-      // Substituído: Usa o helper do serviço
-      return this.apiService.getFotoUrl(this.itemSelecionado()?.id, tipo); 
-  }
+getFotoUrl(tipo: string): string {
+    const baseUrl = this.apiService.getFotoUrl(this.itemSelecionado()?.id, tipo);
+    const ts = new Date().getTime(); // Gera um timestamp novo a cada milissegundo
+    
+    // 🚀 O SEGREDO ESTÁ AQUI:
+    // 1. t=... : Quebra o cache do navegador (Chrome/Edge)
+    // 2. ngsw-bypass=true : Obriga o Angular PWA a ir na rede (ignora o Service Worker)
+    return `${baseUrl}?t=${ts}&ngsw-bypass=true`; 
+}
 
+imagemAmpliada = signal<string | null>(null);
+
+// Método para abrir (substitui o abrirFotoOriginal)
+verImagem(url: string) {
+  if (url) {
+    this.imagemAmpliada.set(url);
+  }
+}
+
+// Método para fechar
+fecharImagem() {
+  this.imagemAmpliada.set(null);
+}
   // --- EDIÇÃO ---
   aoMudarDataEdicao(novaData: string) {
     this.formEdicao.update(atual => ({ ...atual, data: novaData, hora: '' }));
   }
 
+  statusOriginalEdicao = '';
+
   abrirEdicao(event: Event, item: any) {
     event.stopPropagation();
+    this.statusOriginalEdicao = item.vistoria_realizada;
+    this.desvincularOrdens.set(false);
     const [dia, mes, ano] = item.data.split('/');
     const dataIso = `${ano}-${mes}-${dia}`;
     const ordensArray = [ item.pre_ordem1 || '', item.pre_ordem2 || '', item.pre_ordem3 || '', item.pre_ordem4 || '', item.pre_ordem5 || '' ];
@@ -243,22 +388,22 @@ carregarOcupacoes(data: string, local: string) {
 
   selecionarHorario(time: string) { this.formEdicao.update(v => ({ ...v, hora: time })); }
 
-salvarEdicao() {
-    // Substituído: Chamada via ApiService (Porta 5000 no Dev / /api em Prod)
-    this.apiService.gerenciarAgendamento(this.formEdicao()).subscribe({
-        next: () => {
-          this.modalEdicaoAberto.set(false);
-          this.carregarDados();
-          alert('✅ Agendamento atualizado!');
-        },
-        error: (err) => alert(err.error?.error || 'Erro ao atualizar')
-    });
-  }
+
+
+// monitoramento.component.ts
 
 desmarcarAgendamento() {
-    // Apenas abre o novo modal de cancelamento
+    // 🔥 CORREÇÃO AQUI TAMBÉM: Bloqueia cancelamento se já iniciou a vistoria
+    const statusBloqueados = ['VISTORIADO', 'CARREGANDO', 'CARREGADO'];
+
+    if (statusBloqueados.includes(this.statusOriginalEdicao)) {
+        alert('🚫 Ação Bloqueada: Esta vistoria já iniciou ou foi concluída e não pode ser cancelada.');
+        return;
+    }
+
+    // Se estiver pendente, abre o modal normalmente
     this.showCancelModal.set(true);
-  }
+}
 
   fecharModalCancelamento() {
     this.showCancelModal.set(false);
@@ -295,4 +440,87 @@ desmarcarAgendamento() {
 
   aoPesquisar() { this.paginaAtual.set(1); this.carregarDados(); }
   mudarPagina(p: number) { if (p >= 1 && p <= this.totalPaginas()) { this.paginaAtual.set(p); this.carregarDados(); } }
+
+  
+validarAntesDeSalvar() {
+      const dados = this.formEdicao();
+      
+      // Validações Básicas (Placa e Ordem)
+      if (!dados.placa || dados.placa.length < 8) {
+          alert('A placa deve estar completa (Ex: AAA-1234).');
+          return;
+      }
+      const temOrdemValida = dados.pre_ordens.some(o => o && o.trim().length > 0);
+      if (!temOrdemValida && !this.desvincularOrdens()) {
+          alert('Informe pelo menos uma Ordem de Carregamento ou marque a opção "Desvincular Ordens".');
+          return;
+      }
+
+      // 🔥 CORREÇÃO AQUI: Lista dos novos status que indicam que o processo já começou/terminou
+      const statusQueExigemAuditoria = ['VISTORIADO', 'CARREGANDO', 'CARREGADO'];
+
+      // Se o status original estiver na lista acima -> Exige Auditoria
+      if (statusQueExigemAuditoria.includes(this.statusOriginalEdicao)) {
+          this.justificativaEdicao.set(''); 
+          this.modalJustificativaAberto.set(true); // Abre o modal de log!
+      } 
+      // Se estiver PENDENTE ou ATRASADO -> Salva direto sem log
+      else {
+          this.salvarDiretoSemLog();
+      }
+}
+
+  // 🚀 2. CONFIRMAÇÃO FINAL COM O LOG
+  confirmarSalvarComLog() {
+      const motivo = this.justificativaEdicao().trim();
+
+      if (!motivo || motivo.length < 5) {
+          alert('Por favor, descreva o motivo da alteração (mínimo 5 caracteres).');
+          return;
+      }
+
+      // Prepara o payload auditado
+      const payload = {
+          ...this.formEdicao(),
+          responsavel_edicao: this.usuarioNomeLogado, // Capturado no ngOnInit
+          justificativa: motivo,
+          data_log: new Date().toISOString()
+      };
+
+      this.apiService.gerenciarAgendamento(payload).subscribe({
+          next: () => {
+            this.modalJustificativaAberto.set(false); // Fecha auditoria
+            this.modalEdicaoAberto.set(false);        // Fecha edição
+            this.carregarDados();                     // Atualiza a tabela
+            alert('✅ Alteração registrada e auditada com sucesso!');
+          },
+          error: (err) => {
+              console.error(err);
+              alert(err.error?.error || 'Erro ao comunicar com o servidor.');
+          }
+      });
+  }
+  salvarDiretoSemLog() {
+    const payload = {
+        ...this.formEdicao(),
+        responsavel_edicao: this.usuarioNomeLogado,
+        // Envia justificativa vazia ou fixa para indicar que foi edição normal
+        justificativa: null 
+    };
+
+    this.apiService.gerenciarAgendamento(payload).subscribe({
+        next: () => {
+            this.modalEdicaoAberto.set(false);
+            this.carregarDados();
+            alert('✅ Agendamento atualizado com sucesso!');
+        },
+        error: (err) => alert(err.error?.error || 'Erro ao atualizar')
+    });
+}
+
+  setDerivado(valor: 'Todas' | 'Sim' | 'Nao') {
+      this.tipoDerivado.set(valor);
+      this.paginaAtual.set(1); // Sempre volta pra página 1 ao filtrar
+      this.carregarDados();
+  }
 }

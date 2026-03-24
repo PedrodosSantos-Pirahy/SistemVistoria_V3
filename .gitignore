@@ -17,6 +17,9 @@ venv/
 /www
 /bin
 /obj
+.angular/
+coverage/
+.nx/
 
 # === LOGS E DEBUG ===
 logs

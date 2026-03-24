@@ -147,13 +147,26 @@ mudarPagina(novaPagina: number) {
   }
 }
   // PDF
+// No ficheiro: historico.component.ts
+
 abrirPdf(idVistoria: string): void {
     if (!idVistoria) return;
-    // SUBSTITUÍDO: Usa o helper do serviço para pegar a URL correta
-    const urlPdf = this.apiService.getPdfUrl(idVistoria);
+    
+    // 1. Pega a URL base do serviço
+    const baseUrl = this.apiService.getPdfUrl(idVistoria);
+    
+    // 2. Cria um timestamp único
+    const timestamp = new Date().getTime();
+    
+    // 🚀 3. Adiciona os parâmetros mágicos:
+    // t=... quebra o cache do browser
+    // ngsw-bypass=true quebra o cache do Service Worker do Angular
+    const urlPdf = `${baseUrl}?t=${timestamp}&ngsw-bypass=true`;
+    
+    // 4. Liberta a URL para o iFrame
     this.pdfSelecionado.set(this.sanitizer.bypassSecurityTrustResourceUrl(urlPdf));
     this.modalAberto.set(true);
-  }
+}
 
   fecharModal() {
      this.modalAberto.set(false);

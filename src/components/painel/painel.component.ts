@@ -81,10 +81,10 @@ export class PainelComponent implements OnInit {
 
     this.fetchInspections();
 
-    // 🔁 força atualização a cada 10 segundos
+    // 🔁 força atualização a cada 30 segundos
     this.pollingInterval = window.setInterval(() => {
       this.fetchInspections();
-    }, 10000); // 10s (pode baixar pra 5s)
+    }, 30000); // 30s (pode baixar pra 5s)
   }
 
   ngOnDestroy(): void {

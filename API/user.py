@@ -65,32 +65,32 @@ if __name__ == "__main__":
     # --- QUER CRIAR OUTRO? COMENTE O DE CIMA E DESCOMENTE UM ABAIXO ---
 
     # --- EXEMPLO 2: Vistoriador da FILIAL ---
-    # criar_usuario(
-    #     nome="Maria Vistoriadora Filial",
-    #     usuario="maria.vis",
-    #     senha_plana="123456",
-    #     cargo="VIS",
-    #     local="Filial",
-    
-    #     matricula="5728"
-    # )
-
-    # --- EXEMPLO 3: Expedição da FILIAL ---
     criar_usuario(
-        nome="MATHEUS LUCHESE",
-        usuario="MATHEUSL",
-        senha_plana="2525",
-        cargo="ADM",
+        nome="GIUSEPPE SCHVANTES PEREIRA",
+        usuario="GIUSEPPE",
+        senha_plana="5681",
+        cargo="CAR",
         local="",
-        matricula="2525"
+        matricula="5681"
     )
     
-    # --- EXEMPLO 4: ADMIN GERAL ---
+
+    # # --- EXEMPLO 3: Expedição da FILIAL ---
     # criar_usuario(
-    #     nome="Super Admin",
-    #     usuario="admin.master",
-    #     senha_plana="admin123",
-    #     cargo="ADM",
-    #     local="Matriz", 
-    #     matricula="5728"
+    #     nome="YURI BORGES EMERIM",
+    #     usuario="YURI",
+    #     senha_plana="5722",
+    #     cargo="CAR",
+    #     local="",
+    #     matricula="5722"
+    # )
+    
+    # # --- EXEMPLO 4: ADMIN GERAL ---
+    # criar_usuario(
+    #     nome="STEFANI DAL OSTO",
+    #     usuario="STEFANID",
+    #     senha_plana="5715",
+    #     cargo="CAR",
+    #     local="", 
+    #     matricula="5715"
     # )

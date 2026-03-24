@@ -1,0 +1,592 @@
+<div class="min-h-screen bg-[#f8f6f2] p-6 font-sans text-[#4a342d]">
+  
+  <header class="mb-6 border-b border-[#eadfce] pb-4 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+  
+  <div>
+    <h1 class="text-2xl font-black uppercase tracking-tighter text-[#6b2b1f] leading-none">Painel de Carregamento</h1>
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-wide mt-1">Previsão e Organização de Pátio</p>
+  </div>
+
+  <div class="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
+    
+    <div class="bg-white p-1.5 rounded-2xl flex h-11 w-full md:w-auto min-w-[240px] shadow-sm border border-[#eadfce]">
+      <button (click)="setLocal('Qualquer')"
+              [ngClass]="tipoLocal() === 'Qualquer' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Todas</span>
+      </button>
+
+      <button (click)="setLocal('Matriz')"
+              [ngClass]="tipoLocal() === 'Matriz' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Matriz</span>
+      </button>
+
+      <button (click)="setLocal('Filial')"
+              [ngClass]="tipoLocal() === 'Filial' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Filial</span>
+      </button>
+    </div>
+
+    <div class="bg-white p-1.5 rounded-2xl flex h-11 w-full md:w-auto min-w-[240px] shadow-sm border border-[#eadfce]">
+      <button (click)="setDerivado('Todas')"
+              [ngClass]="tipoDerivado() === 'Todas' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Geral</span>
+      </button>
+
+      <button (click)="setDerivado('Sim')"
+              [ngClass]="tipoDerivado() === 'Sim' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Derivados</span>
+      </button>
+
+      <button (click)="setDerivado('Nao')"
+              [ngClass]="tipoDerivado() === 'Nao' ? 'bg-[#6b2b1f] text-white shadow-md' : 'text-gray-500 hover:bg-gray-100'"
+              class="flex-1 flex items-center justify-center gap-2 px-3 rounded-xl text-[11px] font-black uppercase transition-all duration-200">
+        <span>Fardos</span>
+      </button>
+    </div>
+
+  </div>
+</header>
+
+ 
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+    <div class="bg-white p-4 rounded-xl border border-[#eadfce] shadow-sm text-center">
+      <p class="text-[10px] font-bold text-gray-400 uppercase">Caminhões Agendados</p>
+      <p class="text-2xl font-black text-blue-600">{{ stats().agendadosHoje }}</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-[#eadfce] shadow-sm text-center">
+      <p class="text-[10px] font-bold text-gray-400 uppercase">Liberados p/ Carregar</p>
+      <p class="text-2xl font-black text-green-600">{{ stats().caminhoesLiberados }}</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-[#eadfce] shadow-sm text-center">
+      <p class="text-[10px] font-bold text-gray-400 uppercase">Total de Fardos/Caixas</p>
+      <p class="text-2xl font-black text-[#6b2b1f]">{{ stats().totalFardos | number:'1.0-2'}}</p>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-[#eadfce] shadow-sm text-center">
+      <p class="text-[10px] font-bold text-gray-400 uppercase">Mix de Produtos (SKUs)</p>
+      <p class="text-2xl font-black text-purple-600">{{ stats().totalMix }}</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    
+    <div class="lg:col-span-2 bg-white rounded-xl shadow-lg border border-[#eadfce] overflow-hidden flex flex-col h-[600px]">
+      
+      <div class="bg-amber-50 p-3 border-b border-amber-100 flex flex-col gap-3">
+        
+        <div class="flex justify-between items-center gap-2">
+          <h2 class="text-xs sm:text-sm font-black text-amber-900 uppercase flex items-center gap-1 sm:gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.27 6.96L12 12.01l8.73-5.05" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 22.08V12" />
+            </svg>
+            <span class="truncate">Produtos p/ Separar</span>
+            <span class="text-[10px] sm:text-xs text-amber-600 shrink-0">
+              {{ dataSelecionada() === getDataHoje() ? '(Hoje)' : '(' + (dataSelecionada() | date:'dd/MM') + ')' }}
+            </span>
+          </h2>
+
+          <div class="flex items-center gap-2 sm:gap-3">
+            <span class="hidden sm:inline-block text-[9px] font-bold text-amber-700 bg-amber-200 px-2 py-1 rounded">Mise en place</span>
+            
+            <input type="date" 
+                   [ngModel]="dataSelecionada()" 
+                   (ngModelChange)="setData($event)"
+                   class="text-[10px] sm:text-xs p-1 sm:p-1.5 rounded-lg border border-amber-300 text-amber-900 font-bold bg-white outline-none cursor-pointer focus:ring-2 focus:ring-amber-500 shadow-sm transition-all w-[100px] sm:w-auto">
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-2">
+          <input type="text" 
+                 [ngModel]="filtroProduto()" 
+                 (ngModelChange)="filtroProduto.set($event)" 
+                 placeholder="Buscar Produto..." 
+                 class="w-full sm:flex-1 text-xs p-2 rounded-lg border border-amber-200 uppercase font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white placeholder-amber-900/40 shadow-sm">
+
+          <div class="flex gap-2 w-full sm:w-auto">
+            <select [ngModel]="filtroUnidade()" 
+                    (ngModelChange)="filtroUnidade.set($event)" 
+                    class="flex-1 sm:w-28 text-[10px] sm:text-xs p-2 rounded-lg border border-amber-200 uppercase font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white shadow-sm cursor-pointer">
+              <option value="">UNID (Todas)</option>
+              @for (u of unidadesDisponiveis(); track $index) {
+                <option [value]="u">{{ u }}</option>
+              }
+            </select>
+
+            <select [ngModel]="filtroPalete()" 
+                    (ngModelChange)="filtroPalete.set($event)" 
+                    class="flex-1 sm:w-28 text-[10px] sm:text-xs p-2 rounded-lg border border-amber-200 uppercase font-black text-amber-900 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white shadow-sm cursor-pointer">
+              <option value="">Tipo (Todas)</option>
+              @for (p of paletesDisponiveis(); track $index) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div class="overflow-auto flex-grow">
+        <table class="w-full text-left border-collapse min-w-[280px]">
+          <thead class="sticky top-0 bg-white shadow-sm z-10">
+            <tr class="text-[9px] sm:text-[10px] font-black text-gray-400 uppercase border-b border-gray-100">
+              <th class="p-1.5 sm:p-3 leading-tight">Produto</th>
+              
+              <th class="p-1.5 sm:p-3 text-right leading-tight">
+                  <span class="sm:hidden">Qtd</span>
+                  <span class="hidden sm:inline">Quantidade</span>
+              </th>
+              <th class="p-1.5 sm:p-3 text-center leading-tight">
+                  <span class="sm:hidden">Unid</span>
+                  <span class="hidden sm:inline">Unidade</span>
+              </th>
+              <th class="p-1.5 sm:p-3 text-center leading-tight">
+                  <span class="sm:hidden">Palete</span>
+                  <span class="hidden sm:inline">Tipo de Palete</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-50 font-bold text-gray-700">
+            
+            @for (prod of produtosFiltrados(); track $index) {
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="p-1.5 sm:p-3 text-[#6b2b1f] text-[10px] sm:text-xs leading-tight min-w-[100px]">{{ prod.nome }}</td>
+                <td class="p-1.5 sm:p-3 text-right font-black">
+                    <span class="text-sm sm:text-lg">{{ prod.quantidade | number:'1.0-2' }}</span>
+                    
+                    @if (prod.qtd_paletes) {
+                        <span class="text-[10px] sm:text-xs text-gray-400 font-bold ml-0.5 sm:ml-1">/ {{ prod.qtd_paletes }}</span>
+                    }
+                </td>
+                <td class="p-1.5 sm:p-3 text-center">
+                  <span class="bg-gray-100 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[9px] sm:text-[10px]">{{ prod.unidade }}</span>
+                </td>
+                <td class="p-1.5 sm:p-3 text-center">
+                  <span [class]="prod.palete === 'BAT' ? 'text-red-500 bg-red-50 border-red-200' : 'text-blue-600 bg-blue-50 border-blue-200'" 
+                        class="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded border text-[9px] sm:text-[10px] uppercase inline-block whitespace-nowrap">
+                    {{ prod.palete }}
+                  </span>
+                </td>
+              </tr>
+            }
+            
+            @if (produtosFiltrados().length === 0) {
+              <tr>
+                <td colspan="4" class="text-center p-6 text-gray-400 font-bold uppercase text-[10px] sm:text-xs">
+                  Nenhum produto encontrado.
+                </td>
+              </tr>
+            }
+
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-6 h-[600px]">
+      
+      <div class="bg-white rounded-xl shadow-lg border border-[#eadfce] p-5 shrink-0">
+        <h2 class="text-sm font-black text-[#6b2b1f] uppercase mb-4 flex items-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
+          </svg>
+          Progresso do Turno
+        </h2>
+        
+        <div class="flex justify-between text-[10px] font-black text-gray-500 uppercase mb-1.5">
+          <span>Cargas Concluídas</span>
+          <span class="text-green-600 text-xs">{{ stats().cargasConcluidas }} / {{ stats().agendadosHoje }}</span>
+        </div>
+        
+        <div class="w-full bg-gray-100 rounded-full h-5 mb-3 overflow-hidden border border-gray-200 shadow-inner relative">
+          <div class="bg-green-500 h-full rounded-full transition-all duration-1000 ease-in-out relative flex items-center justify-end pr-2" 
+               [style.width.%]="progressoPorcentagem()">
+            <span class="text-[9px] font-black text-white/90" [class.hidden]="progressoPorcentagem() < 10">{{ progressoPorcentagem() }}%</span>
+          </div>
+        </div>
+        
+        <p class="text-[10px] text-gray-500 font-bold text-center">
+          Faltam <span class="text-gray-800 font-black">{{ stats().agendadosHoje - stats().cargasConcluidas }}</span> caminhões para finalizar o dia.
+        </p>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-lg border border-[#eadfce] flex flex-col flex-grow overflow-hidden">
+        <div class="bg-red-50 p-3 border-b border-red-100 flex justify-between items-center">
+          <h2 class="text-sm font-black text-red-900 uppercase flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Próximos na Doca
+          </h2>
+          <span class="text-[9px] font-bold text-red-700 bg-red-200 px-2 py-1 rounded animate-pulse">Ação Imediata</span>
+        </div>
+
+        <div class="p-4 space-y-3 overflow-auto flex-grow">
+          
+          @for (cam of filaCaminhoes(); track $index) {
+            
+            <div class="border rounded-lg p-3 relative overflow-hidden transition-all shadow-sm cursor-pointer hover:scale-[1.02] hover:shadow-md"
+                 (click)="abrirDetalhes(cam)"
+                 [ngClass]="{
+                   'border-amber-400 bg-amber-50/60 shadow-md ring-1 ring-amber-400': cam.status === 'CARREGANDO',
+                   'border-indigo-400 bg-indigo-50/50 shadow-md ring-1 ring-indigo-400': cam.status === 'VISTORIADO' && cam.tem_embarque,
+                   'border-blue-200 bg-blue-50/20': cam.status === 'VISTORIADO' && !cam.tem_embarque,
+                   'border-orange-200 bg-orange-50/20 opacity-80': cam.status === 'ATRASADO',
+                   'border-gray-200 bg-white opacity-60': cam.status === 'PENDENTE'
+                 }">
+              
+              <div class="absolute left-0 top-0 bottom-0 w-1.5"
+                   [ngClass]="{
+                     'bg-amber-500 animate-pulse': cam.status === 'CARREGANDO',
+                     'bg-indigo-600': cam.status === 'VISTORIADO' && cam.tem_embarque,
+                     'bg-blue-400': cam.status === 'VISTORIADO' && !cam.tem_embarque,
+                     'bg-orange-500': cam.status === 'ATRASADO',
+                     'bg-gray-400': cam.status === 'PENDENTE'
+                   }">
+              </div>
+
+              <div class="flex justify-between items-start mb-1 pl-2">
+                <span class="font-black text-lg text-gray-800 tracking-tight">{{ cam.placa }}</span>
+                
+                <div class="text-right flex flex-col items-end">
+                  <span class="text-[7px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{{ cam.texto_hora }}</span>
+                  <span class="text-[10px] font-black px-1.5 py-0.5 rounded leading-none"
+                        [ngClass]="{
+                          'bg-amber-100 text-amber-700': cam.status === 'CARREGANDO',
+                          'bg-blue-100 text-blue-700': cam.status === 'VISTORIADO',
+                          'bg-orange-100 text-orange-700': cam.status === 'ATRASADO',
+                          'bg-gray-100 text-gray-500': cam.status === 'PENDENTE'
+                        }">
+                    {{ cam.hora }}
+                  </span>
+                </div>
+
+              </div>
+              
+              <p class="text-[10px] font-bold text-gray-500 uppercase truncate pl-2 mb-2">{{ cam.transportadora }}</p>
+              
+              <div class="pl-2 flex justify-between items-center mt-1">
+                  <span class="text-[9px] font-black border px-2 py-0.5 rounded truncate max-w-[140px] transition-all"
+                        [ngClass]="cam.tem_embarque ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm' : 'bg-white text-gray-600 border-gray-200'"
+                        title="{{ cam.ordens_resumo }}">
+                    {{ cam.tem_embarque ? '🚚 ' : '' }}{{ cam.ordens_resumo }}
+                  </span>
+                  
+                  <span class="text-[9px] font-black uppercase"
+                        [ngClass]="{
+                          'text-amber-600': cam.status === 'CARREGANDO',
+                          'text-indigo-700': cam.status === 'VISTORIADO' && cam.tem_embarque,
+                          'text-blue-600': cam.status === 'VISTORIADO' && !cam.tem_embarque,
+                          'text-orange-600': cam.status === 'ATRASADO',
+                          'text-gray-500': cam.status === 'PENDENTE'
+                        }">
+                    {{ cam.status }}
+                  </span>
+              </div>
+            </div>
+
+          }
+
+          @if (filaCaminhoes().length === 0) {
+            <div class="text-center p-6 border border-dashed border-gray-300 rounded-lg">
+              <span class="text-2xl opacity-50 mb-2 block">🎉</span>
+              <p class="text-xs font-bold text-gray-400 uppercase">Pátio zerado!</p>
+              <p class="text-[10px] text-gray-400">Nenhum caminhão aguardando carregamento.</p>
+            </div>
+          }
+
+        </div>
+
+        <div class="p-3 border-t border-gray-100 bg-gray-50">
+          <button (click)="chamarMonitoramento()" 
+                  class="w-full py-2 bg-white border border-gray-300 text-gray-600 text-[10px] font-black uppercase rounded-lg shadow-sm hover:bg-gray-100 transition-colors flex items-center justify-center gap-2">
+            <span>Ver Fila Completa no Monitoramento</span>
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="3" stroke="currentColor" class="w-3 h-3">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+@if (paginaDetalhesAberta()) {
+  <div class="fixed inset-0 bg-[#f8f6f2]/95 backdrop-blur-sm z-50 overflow-y-auto animate-fade-in flex flex-col font-sans">
+
+      <div class="bg-[#6b2b1f] text-white p-4 flex justify-between items-center shadow-md sticky top-0 z-50">
+        <div class="flex items-center gap-4">
+          <button (click)="fecharDetalhes()" 
+                  class="group flex items-center gap-2 px-3 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all duration-300 ease-in-out">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-4 h-4 transition-transform duration-300 group-hover:-translate-x-1">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" />
+            </svg>
+            <span class="text-xs font-bold uppercase tracking-wider">Voltar</span>
+          </button>
+          <div>
+            <h2 class="text-xl font-black uppercase tracking-tight">Detalhes Vistoria #{{ itemSelecionado()?.id }}</h2>
+            <p class="text-white/70 text-xs font-bold">{{ itemSelecionado()?.placa }} • {{ itemSelecionado()?.transportadora }}</p>
+          </div>
+        </div>
+      </div>
+    
+      <main class="flex-grow p-6 max-w-7xl mx-auto w-full space-y-6">
+    
+        @if (loadingDetalhes()) {
+            <div class="flex flex-col items-center justify-center py-20">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-[#6b2b1f]"></div>
+                <p class="text-gray-500 font-bold mt-4 uppercase text-xs tracking-widest">Buscando dados no sistema...</p>
+            </div>
+        } @else {
+    
+            @if (detalhesChecklist()?.status === 'Cancelada' || itemSelecionado()?.status === 'CANCELADO') {
+                <section class="bg-red-50 border-l-4 border-red-600 p-6 rounded-r-xl shadow-sm mb-6">
+                    <div class="flex items-start gap-4">
+                        <div class="bg-red-100 p-3 rounded-full text-red-600 text-2xl">🚫</div>
+                        <div class="w-full">
+                            <h3 class="text-red-800 font-black uppercase text-lg mb-1">Vistoria Cancelada</h3>
+                            <p class="text-red-600 text-sm font-bold mb-4">Esta vistoria não foi concluída.</p>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/50 p-4 rounded-lg border border-red-100">
+                                 <div>
+                                    <label class="text-[9px] font-black text-red-400 uppercase">Cancelado Por</label>
+                                    <p class="text-red-900 font-bold">{{ detalhesChecklist()?.responsavel }}</p>
+                                </div>
+                                <div>
+                                    <label class="text-[9px] font-black text-red-400 uppercase">Motivo</label>
+                                    <p class="text-red-900 italic">"{{ detalhesChecklist()?.observacoes }}"</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            }
+    
+            <section class="bg-white p-6 rounded-xl border border-[#eadfce] shadow-sm">
+                <h3 class="text-[#6b2b1f] font-black uppercase text-sm mb-4 border-b border-[#eadfce] pb-2">📦 Dados da Carga</h3>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Placa Principal</label>
+                        <p class="font-black text-gray-800 text-lg">{{ itemSelecionado()?.placa }}</p>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Produto (Sistema)</label>
+                        <div class="font-medium text-xs text-gray-700 whitespace-normal break-words leading-tight">
+                            @if (detalhesChecklist()?.produto_real?.includes('/')) {
+                                @for (prod of detalhesChecklist()?.produto_real.split('/'); track $index) {
+                                    <span class="block border-b border-gray-100 last:border-0 py-0.5">• {{ prod.trim() }}</span>
+                                }
+                            } @else {
+                                {{ detalhesChecklist()?.produto_real || '--' }}
+                            }
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Transportadora</label>
+                        <p class="font-bold text-gray-800">{{ itemSelecionado()?.transportadora }}</p>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Motorista</label>
+                        <p class="font-bold text-gray-800">{{ detalhesChecklist()?.motorista || '--' }}</p>
+                    </div>
+                </div>
+    
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6 pt-4 border-t border-gray-100">
+                     <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Outras Placas</label>
+                        <p class="font-bold text-gray-600 text-sm">{{ detalhesChecklist()?.placas_extras || 'Nenhuma registrada' }}</p> 
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Data</label>
+                        <p class="font-bold text-gray-800">{{ itemSelecionado()?.data }}</p>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Hora Início</label>
+                        <p class="font-mono text-gray-600">{{ itemSelecionado()?.h_inicio }}</p>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold text-gray-400 uppercase">Hora Fim</label>
+                        <p class="font-mono text-gray-600">{{ itemSelecionado()?.h_fim }}</p>
+                    </div>
+                </div>
+            </section>
+    
+            <section class="bg-white p-6 rounded-xl border border-[#eadfce] shadow-sm">
+                <h3 class="text-[#6b2b1f] font-black uppercase text-sm mb-4 border-b border-[#eadfce] pb-2">📄 Dados Emitidos (Ordem | Pedido | Embarque | Nota)</h3>
+                
+                @if (detalhesChecklist()?.dados_emitidos?.length > 0) {
+                    <div class="overflow-x-auto border rounded-lg">
+                        <table class="w-full text-left border-collapse text-sm">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-200 text-[10px] uppercase text-gray-500 font-bold">
+                                    <th class="py-2 px-3">Pré-Ordem</th>
+                                    <th class="py-2 px-3">Pedido</th>
+                                    <th class="py-2 px-3">Embarque</th>
+                                    <th class="py-2 px-3">Nota(s)</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                @for (linha of detalhesChecklist().dados_emitidos; track $index) {
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="py-2 px-3 font-bold text-indigo-700">{{ linha.pre_ordem }}</td>
+                                        <td class="py-2 px-3 font-bold text-gray-800">{{ linha.pedido }}</td>
+                                        <td class="py-2 px-3 text-gray-600">{{ linha.embarque }}</td>
+                                        <td class="py-2 px-3 font-mono text-xs text-gray-600">{{ linha.notas }}</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                } @else {
+                    <div class="bg-gray-50 p-4 rounded-lg text-center border border-dashed border-gray-300">
+                        <p class="text-gray-400 text-xs font-bold uppercase">Nenhum dado fiscal encontrado</p>
+                    </div>
+                }
+            </section>
+    
+            @if (detalhesChecklist() && detalhesChecklist()?.status !== 'Cancelada') {
+                
+                <section class="bg-white p-6 rounded-xl border border-[#eadfce] shadow-sm">
+                    <h3 class="text-[#6b2b1f] font-black uppercase text-sm mb-4 border-b border-[#eadfce] pb-2">✅ Checklist de Inspeção</h3>
+                    
+                    <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                        @for (item of detalhesChecklist().checklist | keyvalue; track item.key) {
+                            @if (item.value) {
+                                <div class="p-3 rounded-lg border flex flex-col justify-between h-full" 
+                                    [ngClass]="{
+                                        'bg-green-50 border-green-200': item.value === 'Conforme',
+                                        'bg-red-50 border-red-200': item.value === 'Não conforme',
+                                        'bg-gray-50 border-gray-200': item.value === 'Não se aplica',
+                                        'bg-amber-50 border-amber-200': item.value !== 'Conforme' && item.value !== 'Não conforme' && item.value !== 'Não se aplica'
+                                    }">
+                                    <span class="block text-[9px] font-bold uppercase opacity-60 mb-1 leading-tight" title="{{item.key}}">{{ item.key }}</span>
+                                    <span class="font-black text-xs leading-tight whitespace-normal break-words" 
+                                          [ngClass]="{
+                                              'text-green-700': item.value === 'Conforme',
+                                              'text-red-700': item.value === 'Não conforme',
+                                              'text-gray-500': item.value === 'Não se aplica',
+                                              'text-amber-700': item.value !== 'Conforme' && item.value !== 'Não conforme' && item.value !== 'Não se aplica'
+                                          }">
+                                        {{ item.value }}
+                                    </span>
+                                </div>
+                            }
+                        }
+                    </div>
+    
+                    @if (detalhesChecklist()?.tipo_veiculo === 'Baú') {
+                        <div class="bg-indigo-50 p-4 rounded-lg border border-indigo-100 mt-4">
+                            <h4 class="text-indigo-800 font-bold text-xs uppercase mb-3">Específico: Caminhão Baú</h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                @if (detalhesChecklist().especificos['Altura Porta 2,30m']) {
+                                    <div class="p-2 bg-white rounded border border-indigo-200">
+                                        <span class="block text-[9px] text-gray-400 uppercase">Altura Porta</span>
+                                        <span class="font-bold text-xs text-indigo-900">{{ detalhesChecklist().especificos['Altura Porta 2,30m'] }}</span>
+                                    </div>
+                                }
+                                @if (detalhesChecklist().especificos['Abertura Total']) {
+                                    <div class="p-2 bg-white rounded border border-indigo-200">
+                                        <span class="block text-[9px] text-gray-400 uppercase">Abertura Total</span>
+                                        <span class="font-bold text-xs text-indigo-900">{{ detalhesChecklist().especificos['Abertura Total'] }}</span>
+                                    </div>
+                                }
+                                @if (detalhesChecklist().especificos['Assoalho Liso']) {
+                                    <div class="p-2 bg-white rounded border border-indigo-200">
+                                        <span class="block text-[9px] text-gray-400 uppercase">Assoalho Liso</span>
+                                        <span class="font-bold text-xs text-indigo-900">{{ detalhesChecklist().especificos['Assoalho Liso'] }}</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+    
+                    @if (detalhesChecklist()?.tipo_veiculo === 'Container') {
+                        <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 mt-4">
+                            <h4 class="text-blue-800 font-bold text-xs uppercase mb-3">Específico: Container</h4>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                @if (detalhesChecklist().especificos['Peso/Tara Container']) {
+                                    <div class="p-2 bg-white rounded border border-blue-200">
+                                        <span class="block text-[9px] text-gray-400 uppercase">Peso/Tara</span>
+                                        <span class="font-bold text-xs text-blue-900">{{ detalhesChecklist().especificos['Peso/Tara Container'] }}</span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+    
+                    @if (detalhesChecklist().observacoes && detalhesChecklist().observacoes !== 'Sem observações.') {
+                        <div class="mt-4 bg-amber-50 p-4 rounded-lg border border-amber-200">
+                            <label class="text-[10px] font-bold text-amber-500 uppercase">Observações do Vistoriador</label>
+                            <p class="text-amber-900 italic text-sm mt-1">{{ detalhesChecklist().observacoes }}</p>
+                        </div>
+                    }
+                </section>
+    
+                <section class="bg-white p-6 rounded-xl border border-[#eadfce] shadow-sm relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-4 border-b border-[#eadfce] pb-2">
+                        <h3 class="text-[#6b2b1f] font-black uppercase text-sm">📸 Galeria de Fotos</h3>
+                    </div>
+                    
+                   <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      @if (fotosDisponiveis()?.placa1) {
+                          <div class="group cursor-pointer" (click)="verImagem(getFotoUrl('placa1'))">
+                              <img [src]="getFotoUrl('placa1')" class="w-full h-32 object-cover rounded-lg border border-gray-200 hover:scale-105 transition-transform">
+                              <p class="text-[9px] font-bold text-center mt-1 text-gray-400">Placa 1</p>
+                          </div>
+                      }
+                      @if (fotosDisponiveis()?.placa2) {
+                           <div class="group cursor-pointer" (click)="verImagem(getFotoUrl('placa2'))">
+                              <img [src]="getFotoUrl('placa2')" class="w-full h-32 object-cover rounded-lg border border-gray-200 hover:scale-105 transition-transform">
+                              <p class="text-[9px] font-bold text-center mt-1 text-gray-400">Placa 2</p>
+                          </div>
+                      }
+                      @if (fotosDisponiveis()?.placa3) {
+                           <div class="group cursor-pointer" (click)="verImagem(getFotoUrl('placa3'))">
+                              <img [src]="getFotoUrl('placa3')" class="w-full h-32 object-cover rounded-lg border border-gray-200 hover:scale-105 transition-transform">
+                              <p class="text-[9px] font-bold text-center mt-1 text-gray-400">Placa 3</p>
+                          </div>
+                      }
+                       @if (fotosDisponiveis()?.interior1) {
+                           <div class="group cursor-pointer" (click)="verImagem(getFotoUrl('interior1'))">
+                              <img [src]="getFotoUrl('interior1')" class="w-full h-32 object-cover rounded-lg border border-gray-200 hover:scale-105 transition-transform">
+                              <p class="text-[9px] font-bold text-center mt-1 text-gray-400">Interior 1</p>
+                          </div>
+                      }
+                       @if (fotosDisponiveis()?.interior2) {
+                           <div class="group cursor-pointer" (click)="verImagem(getFotoUrl('interior2'))">
+                              <img [src]="getFotoUrl('interior2')" class="w-full h-32 object-cover rounded-lg border border-gray-200 hover:scale-105 transition-transform">
+                              <p class="text-[9px] font-bold text-center mt-1 text-gray-400">Interior 2</p>
+                          </div>
+                      }
+                  </div>
+                </section>
+            }
+    
+            <section class="bg-gray-50 p-4 rounded-xl border border-gray-200 flex justify-between items-center">
+              <div>
+                  <label class="text-[9px] font-bold text-gray-400 uppercase">Local da Vistoria</label>
+                  <p class="font-bold text-gray-700 uppercase">{{ itemSelecionado()?.local || 'Não informado' }}</p>
+              </div>
+              <div class="text-right">
+                  <label class="text-[9px] font-bold text-gray-400 uppercase">Vistoriador Responsável</label>
+                  <p class="font-bold text-gray-700 uppercase">{{ detalhesChecklist()?.responsavel || '--' }}</p>
+              </div>
+            </section>
+    
+        }
+      </main>
+  </div>
+}
+
+@if (imagemAmpliada()) {
+  <div class="fixed inset-0 bg-black/95 z-[300] flex flex-col items-center justify-center p-4 animate-fade-in" (click)="fecharImagem()">
+    <button (click)="fecharImagem()" class="absolute top-6 right-6 text-white hover:text-red-500 bg-white/10 rounded-full p-2 z-10">✕</button>
+    <img [src]="imagemAmpliada()" class="max-w-[95vw] max-h-[90vh] object-contain rounded-xl shadow-2xl border-4 border-white/10" (click)="$event.stopPropagation()">
+  </div>
+}

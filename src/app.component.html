@@ -50,6 +50,14 @@
                   Monitorar Pátio
                 </button>
               }
+              @if (podeVerCarregamento()) {
+                <button (click)="setView('carregamento')" 
+                        [class.border-b-2]="view() === 'carregamento'"
+                        [class.border-[#6b2b1f]]="view() === 'carregamento'"
+                        class="px-3 py-2 text-sm font-bold text-gray-700 hover:text-[#6b2b1f] transition h-full border-transparent">
+                  Painel de Carga
+                </button>
+              }
             </div>
           </div>
 
@@ -82,6 +90,10 @@
         @if (podeVerMonitoramento()) {
             <button (click)="setView('monitoramento')" class="text-xs font-bold text-gray-600">MONITORAR</button>
         }
+        @if (podeVerCarregamento()) {
+            <button (click)="setView('carregamento')" class="text-xs font-bold text-gray-600">CARGA</button>
+        }
+        
       </div>
     </nav>
 
@@ -125,6 +137,9 @@
       @else if (view() === 'form') {
           <app-form [placa]="selectedInspection()?.placa" [vistoriaId]="selectedInspection()?.id" (finished)="goBack()"></app-form>
       } 
+      @else if (view() === 'carregamento') {
+          <app-carregamento (irParaMonitoramento)="setView('monitoramento')"></app-carregamento>
+      }
       @else {
           <app-historico></app-historico>
       }

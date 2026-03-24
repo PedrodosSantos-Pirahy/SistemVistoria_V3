@@ -20,13 +20,6 @@ app = Flask(__name__)#, template_folder=pasta_atual)
 # Configuração CORS
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
-# DB_CONFIG = {
-#     "host": "192.168.10.10",
-#     "database": "PgPirahyHML",
-#     "user": "PEDROK",
-#     "password": "0912",
-#     "port": "5432"  
-# }
 load_dotenv()
 
 DB_BUSCA = {
@@ -115,10 +108,21 @@ def get_pendencias_db(filter_date=None):
             SELECT 
                 a.id, a.placa, a.data, a.hr_inicio, a.local, 
                 CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')) as todas_ordens,
-                COALESCE(y."TRP_NOME", 'Consultar Cadastro') as transportadora_oficial
+                
+                -- BUSCA SEGURA: Pega só a primeira transportadora e encerra (LIMIT 1)
+                COALESCE(
+                    (SELECT y2."TRP_NOME" 
+                     FROM "UTRAPLACA" x2 
+                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
+                     LIMIT 1), 
+                    'Consultar Cadastro'
+                ) as transportadora_oficial
+                
             FROM "vistoria"."VAGENDAMENTO" a
-            LEFT JOIN "UTRAPLACA" x ON REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g')
-            LEFT JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
+            
+            -- 🔥 AS LINHAS DO 'LEFT JOIN UTRAPLACA' FORAM DELETADAS DAQUI! 🔥
+            
             WHERE a.data >= CURRENT_DATE
             AND NOT EXISTS (
                 SELECT 1 FROM "vistoria"."VRESPOSTAS" r 
@@ -230,6 +234,8 @@ def consultar_placa(placa):
     finally:
         if conn: conn.close()
 
+# No arquivo: agend.py
+
 @app.route('/criar-agendamento', methods=['POST'])
 def criar_agendamento():
     conn = None
@@ -252,28 +258,54 @@ def criar_agendamento():
         for i, ordem in enumerate(lista_ordens[:5]):
             ordens_db[i] = ordem
 
-        # 🔥 ALTERAÇÃO: Conecta no DB_BUSCA
         print("🔌 Conectando ao DB_BUSCA...")
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
 
+        # 🔥 LÓGICA DO DERIVADO (O Garçom Inteligente)
+        is_derivado = False
+        ordens_validas = [str(o).strip() for o in lista_ordens[:5] if str(o).strip()]
+        
+        if ordens_validas:
+            # Pede para a despensa (ERP) as unidades dos produtos
+            sql_unidades = """
+                SELECT z."PRD_UNID"
+                FROM "APEDIDOS" x
+                JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                WHERE x."PED_PRE_ORDEM" IN %s
+            """
+            cur.execute(sql_unidades, (tuple(ordens_validas),))
+            unidades_encontradas = cur.fetchall()
+            
+            for unid in unidades_encontradas:
+                unidade_texto = str(unid[0]).strip().upper() if unid[0] else ""
+                if unidade_texto == 'TON': 
+                    is_derivado = True
+                    break 
+
+        # 🔥 MUDANÇA: Adicionado 'derivado' no INSERT
         sql = """
             INSERT INTO "vistoria"."VAGENDAMENTO" 
-            (placa, data, hr_inicio, hr_fim, local, pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            (placa, data, hr_inicio, hr_fim, local, pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5, criado_em, derivado, criado_por)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
             RETURNING id;
         """
 
         valores = (
             dados['placa'], dados['data_agendamento'], dados['hora_inicio'], str_hr_fim,
-            dados.get('local', 'Matriz'), ordens_db[0], ordens_db[1], ordens_db[2], ordens_db[3], ordens_db[4]
+            dados.get('local', 'Matriz'), ordens_db[0], ordens_db[1], ordens_db[2], ordens_db[3], ordens_db[4],
+            is_derivado, 
+            dados.get('criado_por', 'Sistema') # 🔥 Pega o nome de quem criou, ou salva como 'Sistema'
         )
 
         cur.execute(sql, valores)
         novo_id = cur.fetchone()[0]
         conn.commit()
 
-        print(f"🎉 SUCESSO! Agendamento criado ID: {novo_id}")
+        print(f"🎉 SUCESSO! Agendamento {novo_id} criado! (Derivado: {is_derivado})")
+        
+        # 👇 CORREÇÃO: O GARÇOM VOLTANDO COM A RESPOSTA (JSON)
         return jsonify({"message": "Agendado com sucesso!", "id": novo_id}), 200
 
     except Exception as e:
@@ -330,32 +362,26 @@ def get_dados_carga(placa):
         produtos_formatados = [] # Vamos usar ESSA lista do começo ao fim
 
         # 2. Se tiver pré-ordem, busca os Produtos (Mesma conexão!)
+        # ... (código anterior)
+        # 2. Se tiver pré-ordem, busca os Produtos (Mesma conexão!)
+        # 2. Se tiver pré-ordem, busca os Produtos (Mesma conexão!)
         if lista_pre_ordens:
             pre_ordens_tuple = tuple(lista_pre_ordens)
             
+            # 🔥 SQL ATUALIZADO: Trazendo a soma de produtos e o TIPO DE PALETE!
             sql_produtos = """
-                SELECT 
-                    z."PRD_DESC_RES",
-                    SUM(
-                        (y."PED_QUANT" * CASE u."PRUN_UNID_TRIBUT"
-                            WHEN 'UN' THEN 
-                                CASE 
-                                    WHEN t."PRT_COEFIC" IS NULL THEN 1.0
-                                    ELSE (y."PED_PESO" / NULLIF(y."PED_QUANT", 0)) / NULLIF(t."PRT_COEFIC", 0)
-                                END
-                            ELSE 1.0
-                        END)
-                    ) as total_fd30, 
-                    z."PRD_UNID"
+                SELECT
+                    z."PRD_DESC_RES", 
+                    SUM(y."PED_QUANT") as quantidade_total,
+                    z."PRD_UNID", 
+                    COALESCE(s."PLT_DESC_TIPO", 'BAT') as tipo_palete
                 FROM "APEDIDOS" x
                 JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                 JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "UPROUNID" u ON z."PRD_UNID" = u."PRUN_CODIGO"
-                LEFT JOIN "UPRODTAB" t ON z."PRD_COD_TAB" = t."PRT_CODIGO"
+                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
                 WHERE x."PED_PRE_ORDEM" IN %s
-                GROUP BY z."PRD_DESC_RES", z."PRD_UNID"
+                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
             """
-            
             cur.execute(sql_produtos, (pre_ordens_tuple,))
             rows_prod = cur.fetchall()
             
@@ -363,22 +389,16 @@ def get_dados_carga(placa):
                 desc = rp[0].strip() if rp[0] else "PRODUTO SEM NOME"
                 qtd = rp[1] if rp[1] is not None else 0
                 unidade_banco = str(rp[2]).strip().upper() if rp[2] else "" 
+                tipo_palete = str(rp[3]).strip() # Ex: PBR, CHEP, BAT
                 
                 # Formatação da Quantidade
                 if qtd % 1 == 0:
                     qtd_fmt = f"{int(qtd)}"
                 else:
                     qtd_fmt = f"{qtd:.2f}"
-                
-                # Lógica da Unidade
-                if unidade_banco == 'FD':
-                    sufixo_unidade = "FD30"
-                else:
-                    sufixo_unidade = unidade_banco
 
-                # 🔥 CORREÇÃO: Usar 'produtos_formatados' aqui
-                produtos_formatados.append(f"{desc} - {qtd_fmt} {sufixo_unidade}")
-
+                # Monta a string limpa para o Frontend (Ex: "ARROZ BRANCO - 150 FD (PBR)")
+                produtos_formatados.append(f"{desc} - {qtd_fmt} {unidade_banco} ({tipo_palete})")
         # Monta a string final com a lista correta
         produto_final = " / ".join(produtos_formatados) if produtos_formatados else "Aguardando definição..."
         ordens_final = ", ".join(lista_pre_ordens)
@@ -462,11 +482,41 @@ def receber_vistoria():
             lista_placas = [p.upper() for p in raw_placas if p and p.strip() and p.lower() not in ['null', 'undefined', 'none']]
 
             # --- CORREÇÃO PRODUTO (Limita caracteres) ---
+
+            # 👇 --- LÓGICA BLINDADA PARA DATA DE REVISÃO (D+1) --- 👇
+            # 1. Define um valor padrão (Amanhã) para garantir que nunca fique vazio
+            data_cabecalho = (datetime.now() + timedelta(days=1)).strftime("%d/%m/%Y")
+            data_base_str = "Início" # Inicializa variável para evitar erro no print
+
+            try:
+                # 2. Tenta pegar a data real
+                data_base_str = form_data.get('vistoria') or form_data.get('chegada')
+                
+                if data_base_str:
+                    # 3. Limpeza Extrema: Remove 'T', pega só a primeira parte antes do espaço
+                    # Transforma "2026-02-18T13:00" ou "18/02/2026 13:00" em apenas a data
+                    data_limpa = data_base_str.replace('T', ' ').split(' ')[0].strip()
+                    
+                    # 4. Tenta converter os dois formatos possíveis
+                    if '/' in data_limpa:
+                        dt_obj = datetime.strptime(data_limpa, "%d/%m/%Y")
+                    else:
+                        dt_obj = datetime.strptime(data_limpa, "%Y-%m-%d")
+
+                    # 5. Aplica a regra D+1
+                    dt_revisao = dt_obj + timedelta(days=1)
+                    data_cabecalho = dt_revisao.strftime("%d/%m/%Y")
+
+            except Exception as e:
+                # Se der qualquer erro, apenas avisa no log e usa a data padrão (Amanhã)
+                print(f"⚠️ Aviso: Não foi possível calcular D+1 da data '{data_base_str}'. Usando data padrão. Erro: {e}")
+            # 👆 -------------------------------------------------------- 👆
             
             context_pdf = {
                 "data": datetime.now().strftime("%d/%m/%Y"),
                 "chegada": formatar_data_pdf(form_data.get('chegada')),
                 "vistoria": formatar_data_pdf(form_data.get('vistoria')),
+                "fim": formatar_data_pdf(form_data.get('fim')),
                 "local_vistoria": form_data.get('localVistoria'),
                 "ordem": form_data.get('numeroOrdem'),
                 "transportadora": form_data.get('transportadora'),
@@ -526,9 +576,9 @@ def receber_vistoria():
         dados_db = {
             "id_agend": form_data.get('id'),
             "status": "Concluida",
-            "data_chegada": form_data.get('chegada'),
-            "vistoria_inicio": form_data.get('vistoria'),
-            "vistoria_fim": form_data.get('fim'),
+            "data_chegada": form_data.get('chegada') or None,
+            "vistoria_inicio": form_data.get('vistoria') or None,
+            "vistoria_fim": form_data.get('fim') or None,
             "nr_ordem": form_data.get('numeroOrdem'),
             "transportadora": form_data.get('transportadora'),
             "operacao": form_data.get('operacao'),
@@ -674,8 +724,7 @@ def login():
     finally:
         if conn: conn.close()
 
-# Em agend.py
-
+# No arquivo: agend.py
 @app.route('/gerenciar-agendamento', methods=['POST'])
 def gerenciar_agendamento():
     conn = None
@@ -683,69 +732,131 @@ def gerenciar_agendamento():
         dados = request.json
         id_agend = dados.get('id')
         acao = dados.get('acao', 'editar')
+        
+        # Campos de Auditoria
+        justificativa = dados.get('justificativa')
+        usuario_responsavel = dados.get('responsavel_edicao')
 
         if not id_agend: return jsonify({"error": "ID não fornecido"}), 400
 
+        # 🔥 CORREÇÃO: A CONEXÃO TEM QUE SER A PRIMEIRA COISA
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
 
-        # 1. Trava se já estiver concluída
+        # 1. VERIFICA SE JÁ ESTÁ CONCLUÍDA
         cur.execute('SELECT 1 FROM "vistoria"."VRESPOSTAS" WHERE CAST(id_agend AS VARCHAR) = %s AND status = %s', (str(id_agend), 'Concluida'))
-        if cur.fetchone():
-            return jsonify({"error": "Vistoria já concluída"}), 403
+        is_concluida = cur.fetchone()
 
+        # Se concluída e sem justificativa -> BLOQUEIA
+        if is_concluida and not justificativa:
+            return jsonify({"error": "Vistoria concluída. Requer justificativa TI."}), 403
+
+        # 2. BUSCA DADOS ANTIGOS (SÓ SE FOR GRAVAR LOG)
+        # Se não tiver justificativa (edição normal de pendente), não precisa buscar o antigo para comparar
+        alteracoes_texto = []
+        
+        if justificativa:
+            cur.execute("""
+                SELECT placa, data, hr_inicio, local, 
+                       pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5
+                FROM "vistoria"."VAGENDAMENTO" WHERE id = %s
+            """, (id_agend,))
+            antigo = cur.fetchone()
+            
+            if antigo:
+                antigo_dict = {
+                    'placa': antigo[0],
+                    'data': str(antigo[1]), 
+                    'hora': str(antigo[2])[:5], 
+                    'local': antigo[3],
+                    'pre_ordens': [p for p in antigo[4:] if p] 
+                }
+
+                # Comparações
+                nova_placa = dados.get('placa')
+                if nova_placa != antigo_dict['placa']:
+                    alteracoes_texto.append(f"Placa: {antigo_dict['placa']} -> {nova_placa}")
+
+                nova_data = dados.get('data')
+                if nova_data != antigo_dict['data']:
+                    alteracoes_texto.append(f"Data: {antigo_dict['data']} -> {nova_data}")
+
+                nova_hora = dados.get('hora')
+                if nova_hora != antigo_dict['hora']:
+                    alteracoes_texto.append(f"Hora: {antigo_dict['hora']} -> {nova_hora}")
+                    
+                novo_local = dados.get('local')
+                if novo_local != antigo_dict['local']:
+                    alteracoes_texto.append(f"Local: {antigo_dict['local']} -> {novo_local}")
+
+                novas_ordens = [str(o).strip()[:6] for o in dados.get('pre_ordens', []) if str(o).strip()]
+                antigas_ordens_str = ",".join(sorted(antigo_dict['pre_ordens']))
+                novas_ordens_str = ",".join(sorted(novas_ordens))
+                
+                if antigas_ordens_str != novas_ordens_str:
+                     alteracoes_texto.append(f"Ordens: [{antigas_ordens_str}] -> [{novas_ordens_str}]")
+
+                if not alteracoes_texto:
+                    alteracoes_texto.append("Nenhuma alteração de dados detectada (apenas salvou)")
+
+            # 3. GRAVA NA TABELA 'VAUDITORIA'
+            texto_mudancas = " | ".join(alteracoes_texto)
+            texto_mudancas_safe = (texto_mudancas[:245] + '...') if len(texto_mudancas) > 249 else texto_mudancas
+            
+            sql_audit = """
+                INSERT INTO "vistoria"."VAUDITORIA" 
+                ("ID_agend", usuario, motivo, "alteração", dataehorario) 
+                VALUES (%s, %s, %s, %s, NOW())
+            """
+            cur.execute(sql_audit, (id_agend, usuario_responsavel, justificativa, texto_mudancas_safe))
+            print(f"📝 Log gravado: {usuario_responsavel}")
+
+        # 4. SEGUE A EDIÇÃO NORMALMENTE
         if acao == 'cancelar':
+            # 🛑 TRAVA NOVA: Se já estiver concluída, proíbe cancelar
+            if is_concluida:
+                return jsonify({"error": "Operação Bloqueada: Não é permitido cancelar uma vistoria já concluída."}), 403
+
             sql_cancelar = 'INSERT INTO "vistoria"."VRESPOSTAS" (id_agend, status, observacoes, vistoria_fim) VALUES (%s, \'Cancelada\', %s, NOW())'
             cur.execute(sql_cancelar, (id_agend, dados.get('motivo')))
         else:
-            # 2. Validação de Lotação (Excluindo o próprio ID)
-            nova_data = dados.get('data')
-            nova_hora = dados.get('hora')
-            novo_local = dados.get('local')
-            duracao = int(dados.get('duracao', 30))
+             # Prepara dados para update
+             nova_placa = dados.get('placa')
+             nova_data = dados.get('data')
+             nova_hora = dados.get('hora')
+             novo_local = dados.get('local')
+             novas_ordens = [str(o).strip()[:6] for o in dados.get('pre_ordens', []) if str(o).strip()]
+             
+             duracao = int(dados.get('duracao', 30))
+             ordens_db = (novas_ordens + [None] * 5)[:5]
+             
+             dt_inicio = datetime.strptime(nova_hora, '%H:%M')
+             dt_fim = dt_inicio + timedelta(minutes=duracao)
+             hora_fim = dt_fim.strftime('%H:%M')
 
-            cur.execute("""
-                SELECT COUNT(*) FROM "vistoria"."VAGENDAMENTO" a
-                LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
-                WHERE a.data = %s AND a.hr_inicio = %s AND a.local = %s 
-                AND a.id != %s 
-                AND (r.status IS NULL OR r.status != 'Cancelada')
-            """, (nova_data, nova_hora, novo_local, id_agend))
-            
-            total_concorrentes = cur.fetchone()[0]
-            
-            if total_concorrentes >= 3:
-                return jsonify({"error": f"Horário das {nova_hora} está lotado ({total_concorrentes} agendamentos)."}), 400
-
-            # 3. Processamento dos Dados
-            ordens = [str(o).strip()[:6] for o in dados.get('pre_ordens', []) if str(o).strip()]
-            ordens_db = (ordens + [None] * 5)[:5]
-            
-            # Recalcula hr_fim baseado na duração escolhida
-            fmt = '%H:%M'
-            dt_inicio = datetime.strptime(nova_hora, fmt)
-            dt_fim = dt_inicio + timedelta(minutes=duracao)
-            hora_fim = dt_fim.strftime(fmt)
-
-            # 🔥 CORREÇÃO: Removemos 'duracao = %s' do SQL pois a coluna não existe
-            sql_update = """
+             sql_update = """
                 UPDATE "vistoria"."VAGENDAMENTO" 
                 SET placa = %s, data = %s, hr_inicio = %s, hr_fim = %s, local = %s,
                     pre_ordem1 = %s, pre_ordem2 = %s, pre_ordem3 = %s, pre_ordem4 = %s, pre_ordem5 = %s
                 WHERE id = %s
-            """
-            cur.execute(sql_update, (
-                dados.get('placa'), nova_data, nova_hora, hora_fim, 
+             """
+             cur.execute(sql_update, (
+                nova_placa, nova_data, nova_hora, hora_fim, 
                 novo_local, *ordens_db, id_agend
-            ))
+             ))
 
         conn.commit()
         return jsonify({"message": "Sucesso"}), 200
+
     except Exception as e:
         if conn: conn.rollback()
+        print("❌ Erro:", e)
+        # traceback.print_exc() # Descomente se quiser ver o erro detalhado no terminal
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)

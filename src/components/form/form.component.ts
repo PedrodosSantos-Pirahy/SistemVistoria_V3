@@ -9,6 +9,7 @@ import { debounceTime, distinctUntilChanged } from 'rxjs/operators';
 import { OfflineStorageService } from '../../storange/offline-storage.service';
 import { FormsModule } from '@angular/forms'; // Importante para ngModel
 import { ApiService } from '../../services/app.service';
+import { ChangeDetectorRef } from '@angular/core';
 
 declare var SignaturePad: any;
 
@@ -281,7 +282,8 @@ export class FormComponent implements OnDestroy {
 
   private placaInicializada = false;
   constructor(
-    private router: Router,
+    private router: Router, 
+    private cdr: ChangeDetectorRef,
     private offlineStorage: OfflineStorageService) {
     
     const userJson = localStorage.getItem('user');
@@ -799,51 +801,71 @@ export class FormComponent implements OnDestroy {
     }
   }
 
-  private drawDataURLOnCanvas(canvas: HTMLCanvasElement, dataURL: string): Promise<void> {
-    return new Promise((resolve) => {
-      const tryDraw = () => {
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          requestAnimationFrame(tryDraw);
-          return;
-        }
+private drawDataURLOnCanvas(canvas: HTMLCanvasElement, dataURL: string): Promise<void> {
+  return new Promise((resolve) => {
+    const tryDraw = () => {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        requestAnimationFrame(tryDraw);
+        return;
+      }
 
-        const img = new Image();
-        img.src = dataURL;
-        img.onload = () => {
-          canvas.width = canvas.offsetWidth;
-          canvas.height = canvas.offsetHeight;
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          resolve();
-        };
+      const img = new Image();
+      img.src = dataURL;
+      
+      // O código só continua (resolve) quando a imagem carregar na memória
+      img.onload = () => {
+        canvas.width = canvas.offsetWidth; // Garante tamanho correto
+        canvas.height = canvas.offsetHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        resolve(); // <--- AQUI libera o código para fechar o modal
       };
-      tryDraw();
-    });
+    };
+    tryDraw();
+  });
+}
+
+async saveAndCloseSignature() {
+  // 1. Validação básica
+  if (!this.fullscreenPad || !this.signatureFor || this.fullscreenPad.isEmpty()) {
+    alert('Por favor, assine antes de salvar.');
+    return;
   }
 
-
-  async saveAndCloseSignature() {
-    if (!this.fullscreenPad || !this.signatureFor) return;
-
-    // Salva no FormControl
-    const dataURL = this.fullscreenPad.toDataURL();
-    if (this.signatureFor === 'motorista') {
-      this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
-    } else if (this.signatureFor === 'vistoriador') {
-      this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
-    }
-
-    // Desenha no canvas pequeno de forma segura
-    const targetCanvas = this.getTargetCanvas(this.signatureFor);
-    if (targetCanvas) {
-      await this.drawDataURLOnCanvas(targetCanvas, dataURL);
-    }
-
-    // Fecha o modal
-    await this.closeSignatureFullscreen();
+  // 2. Pega a imagem da assinatura
+  const dataURL = this.fullscreenPad.toDataURL();
+  
+  // 3. Define qual controle e qual canvas pequeno receberão a imagem
+  let targetCanvas: HTMLCanvasElement | null = null;
+  
+  if (this.signatureFor === 'motorista') {
+    this.form.controls.finalizacao.controls.motoristaAssinatura.setValue(dataURL);
+    targetCanvas = this.motoristaCanvas?.nativeElement ?? null;
+  } else if (this.signatureFor === 'vistoriador') {
+    this.form.controls.finalizacao.controls.vistoriadorAssinatura.setValue(dataURL);
+    targetCanvas = this.vistoriadorCanvas?.nativeElement ?? null;
   }
 
+  // 4. A MÁGICA: Desenha e ESPERA (await) ficar pronto
+  if (targetCanvas) {
+    // Força o Angular a renderizar o canvas caso ele estivesse oculto (ex: via *ngIf)
+    this.cdr.detectChanges(); 
+    
+    // Espera a imagem carregar e ser pintada pixel a pixel
+    await this.drawDataURLOnCanvas(targetCanvas, dataURL);
+  }
+
+  // 5. Pequeno delay visual (100ms) para o usuário perceber que "processou"
+  await new Promise(resolve => setTimeout(resolve, 100));
+
+  // 6. Só agora fecha o modal
+  await this.closeSignatureFullscreen();
+  
+  // 7. Feedback
+  this.triggerToast();
+}
 
 
   private getFormattedDatetimeLocal(date: Date): string {

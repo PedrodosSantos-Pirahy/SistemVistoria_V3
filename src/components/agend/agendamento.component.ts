@@ -1,5 +1,4 @@
-import { Component as NgComponent, signal as ngSignal, computed as ngComputed, inject, effect } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component as NgComponent, signal as ngSignal, computed as ngComputed, inject, effect, OnInit } from '@angular/core';import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
@@ -17,7 +16,7 @@ interface IntervaloOcupado {
   imports: [CommonModule, FormsModule],
   templateUrl: './agendamento.component.html'
 })
-export class AgendamentoComponent {
+export class AgendamentoComponent implements OnInit{
 
   private apiService: ApiService = inject(ApiService);
   private http: HttpClient = inject(HttpClient);
@@ -55,6 +54,15 @@ export class AgendamentoComponent {
     });
   }
 
+  ngOnInit() {
+    const dados = localStorage.getItem('usuario_logado');
+    if (dados) {
+      const user = JSON.parse(dados);
+      if (user.local === 'Matriz' || user.local === 'Filial') {
+        this.selectedLocal.set(user.local);
+      }
+    }
+  }
   // --- BUSCA DADOS NO BACKEND ---
 carregarOcupacoes(data: string, local: string) {
   this.horaSelecionada.set(null);
@@ -233,16 +241,18 @@ if (slotSelecionado && slotSelecionado.load >= 3) {
     // Verifica: Placa + Data + Ordem1 (Ignora Hora)
     // ... dentro do confirmarAgendamento ...
     const primeiraOrdem = ordensValidas[0];
-    const params = `placa=${this.placa()}&data=${this.selectedDate()}&ordem=${primeiraOrdem}`;
+    const params = `placa=${this.placa()}&data=${this.selectedDate()}&ordem=${primeiraOrdem}&local=${this.selectedLocal()}`;
 
     // SUBSTITUÍDO: Chama o serviço em vez do IP fixo
     this.apiService.verificarDuplicidade(params).subscribe({
         next: (check) => {
           if (check.duplicado) {
-            alert(`⚠️ ATENÇÃO: Já existe um agendamento para esta PLACA e ORDEM neste DIA!`);
+            alert(`⚠️ ATENÇÃO: Já existe um agendamento para esta PLACA, ORDEM e LOCAL neste DIA!`);
             this.isSubmitting.set(false);
             return;
           }
+          const dadosUser = localStorage.getItem('usuario_logado');
+          const userObj = dadosUser ? JSON.parse(dadosUser) : {};
 
           const payload = {
             placa: this.placa(),
@@ -252,7 +262,8 @@ if (slotSelecionado && slotSelecionado.load >= 3) {
             duracao_minutos: this.duracao(),
             pre_ordens: ordensValidas,
             local: this.selectedLocal(),
-            status: 'Pendente' 
+            status: 'Pendente' ,
+            criado_por: userObj.nome || 'Sistema'
           };
 
           // SUBSTITUÍDO: Chama o serviço para criar
