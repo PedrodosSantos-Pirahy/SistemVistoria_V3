@@ -24,6 +24,7 @@ load_dotenv()
 
 DB_BUSCA = {
     "host": os.getenv("DB_HOST"),
+    
     "database": os.getenv("DB_NAME"),
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASS"),
@@ -370,17 +371,28 @@ def get_dados_carga(placa):
             
             # 🔥 SQL ATUALIZADO: Trazendo a soma de produtos e o TIPO DE PALETE!
             sql_produtos = """
-                SELECT
+                SELECT 
                     z."PRD_DESC_RES", 
-                    SUM(y."PED_QUANT") as quantidade_total,
+                    SUM(y."PED_QUANT") as quantidade_total, 
                     z."PRD_UNID", 
-                    COALESCE(s."PLT_DESC_TIPO", 'BAT') as tipo_palete
+                    -- Lógica solicitada:
+                    CASE 
+                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                    END AS tipo_palete_final
                 FROM "APEDIDOS" x
                 JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                 JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s
-                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
+                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
+                WHERE x."PED_PRE_ORDEM" IN %s 
+                GROUP BY 
+                    z."PRD_DESC_RES", 
+                    z."PRD_UNID", 
+                    -- Importante: o GROUP BY deve refletir a lógica do SELECT
+                    u."PES_TP_PALET",
+                    s."PLT_DESC_TIPO"
+                ORDER BY quantidade_total DESC
             """
             cur.execute(sql_produtos, (pre_ordens_tuple,))
             rows_prod = cur.fetchall()
@@ -856,6 +868,389 @@ def gerenciar_agendamento():
     finally:
         if conn: conn.close()
 
+import csv # Adicione isto lá no topo do ficheiro se não tiver, ou o Python já carrega nativamente!
+
+# --- NOVA ROTA: EXPORTAR RELATÓRIOS (EXCEL E PDF) ---
+@app.route('/exportar-relatorio', methods=['GET'])
+def exportar_relatorio():
+    data_inicio = request.args.get('inicio', '')
+    data_fim = request.args.get('fim', '')
+    status = request.args.get('status', 'Todas')
+    local = request.args.get('local', 'Qualquer')
+    derivado = request.args.get('derivado', 'Todas')
+    transportadora = request.args.get('transportadora', '').strip().upper()
+    formato = request.args.get('formato', 'excel')
+
+    # Tradução bonita do Filtro "Derivado" para o cabeçalho do PDF
+    texto_tipo_filtro = "Geral (Ambas)"
+    if derivado == 'Sim':
+        texto_tipo_filtro = "Derivados (A Granel)"
+    elif derivado == 'Nao':
+        texto_tipo_filtro = "Fardos"
+
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_BUSCA)
+        cur = conn.cursor()
+
+        # ==========================================
+        # 1. MONTANDO OS FILTROS DA BUSCA
+        # ==========================================
+        where_parts = ["a.data BETWEEN %s AND %s"]
+        params_query = [data_inicio, data_fim]
+
+        if status != 'Todas':
+            if status == 'AGUARDANDO':
+                where_parts.append("(a.status_patio IN ('PENDENTE', 'ATRASADO') OR a.status_patio IS NULL)")
+            else:
+                where_parts.append("a.status_patio = %s")
+                params_query.append(status)
+
+        if local != 'Qualquer':
+            where_parts.append("UPPER(TRIM(a.local)) = UPPER(TRIM(%s))")
+            params_query.append(local)
+
+        if derivado == 'Sim':
+            where_parts.append("a.derivado = TRUE")
+        elif derivado == 'Nao':
+            where_parts.append("(a.derivado = FALSE OR a.derivado IS NULL)")
+
+        if transportadora:
+            where_parts.append("""
+                UPPER(COALESCE(r.transportadora, 
+                    (SELECT y2."TRP_NOME" FROM "UTRAPLACA" x2 
+                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
+                     LIMIT 1)
+                )) LIKE %s
+            """)
+            params_query.append(f"%{transportadora}%")
+
+        where_final = " AND ".join(where_parts)
+
+        # ==========================================
+        # 2. A SUPER QUERY (Traz 35 colunas de dados)
+        # ==========================================
+        sql = f"""
+            SELECT 
+                a.placa, 
+                to_char(a.data, 'DD/MM/YYYY'), 
+                to_char(a.hr_inicio, 'HH24:MI'),
+                to_char(a.hr_fim, 'HH24:MI'),
+                a.local,
+                CASE WHEN a.derivado = TRUE THEN 'Derivados (A Granel)' ELSE 'Fardos' END,
+                COALESCE(a.status_patio, 'PENDENTE'),
+                COALESCE(a.criado_por, 'Sistema'),
+                
+                CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')),
+                
+                COALESCE(r.transportadora, 
+                    (SELECT y2."TRP_NOME" FROM "UTRAPLACA" x2 
+                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
+                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
+                     LIMIT 1), 
+                'NÃO INFORMADA'),
+                
+                r.motorista,
+                r.vistoriador,
+                to_char(r.data_chegada, 'DD/MM/YYYY HH24:MI'),
+                to_char(r.vistoria_inicio, 'DD/MM/YYYY HH24:MI'),
+                to_char(r.vistoria_fim, 'DD/MM/YYYY HH24:MI'),
+                
+                -- Campos do Carregamento 
+                CAST(f."FE_INICIO_CAR" AS VARCHAR),
+                CAST(f."FE_FIM_CAR" AS VARCHAR),
+
+                r.caminhao_liberado,
+                r.tipo_veiculo,
+                r.produto,
+                r.observacoes,
+
+                -- Respostas do Checklist
+                r.chk_limpeza_insetos,
+                r.chk_danos_frestas,
+                r.chk_umidade_mofo,
+                r.chk_residuos_carroceria,
+                r.chk_outros_produtos_odores,
+                r.chk_bocas_graneleiras,
+                r.chk_lonas_forracao,
+                r.chk_chapas_mdf,
+                r.chk_lonas_integras,
+                r.chk_cantoneiras_cintas,
+                r.chk_tampas_vedacao,
+
+                -- Respostas Específicas
+                r.chk_porta_altura,
+                r.chk_abertura_total,
+                r.chk_assoalho_liso,
+                r.chk_peso_container
+
+            FROM "vistoria"."VAGENDAMENTO" a
+            LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
+            
+            -- Busca do Carregamento
+            LEFT JOIN LATERAL (
+                SELECT "FE_INICIO_CAR", "FE_FIM_CAR"
+                FROM agr."AEMBFICHA" emb
+                WHERE emb."FE_PLACA" = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g')
+                  AND emb."FE_DATA" = a.data
+                  -- Garante que o carregamento iniciou DEPOIS (ou ao mesmo tempo) do fim da vistoria
+                  AND (r.vistoria_fim IS NULL OR CAST(emb."FE_HR_INC" AS TIME) >= CAST(r.vistoria_fim AS TIME))
+                ORDER BY emb."FE_HR_INC" ASC
+                LIMIT 1
+            ) f ON true
+            
+            WHERE {where_final}
+            ORDER BY a.data ASC, a.hr_inicio ASC
+        """
+        cur.execute(sql, tuple(params_query))
+        rows = cur.fetchall()
+
+        # ==============================================================
+        # 🟢 OPÇÃO 1: EXCEL (Com todas as 35 colunas detalhadas)
+        # ==============================================================
+        if formato == 'excel':
+            output = io.StringIO()
+            writer = csv.writer(output, delimiter=';', dialect='excel')
+            
+            # Cabeçalho Gigante Atualizado
+            cabecalho = [
+                'Placa', 'Data Agendada', 'Hora Início Agend.', 'Hora Fim Agend.', 'Unidade', 'Tipo Carga',
+                'Status no Pátio', 'Criado Por', 'Pré-Ordens', 'Transportadora', 'Motorista', 'Vistoriador',
+                'Chegada Motorista' ,'Início Vistoria', 'Fim Vistoria', 'Início Carregamento (ERP)', 'Fim Carregamento (ERP)',
+                'Caminhão Liberado?', 'Tipo Veículo', 'Produto/Carga', 'Observações da Vistoria',
+                'Limpeza/Insetos', 'Danos/Frestas', 'Umidade/Mofo', 'Resíduos', 'Odores', 'Bocas Graneleiras',
+                'Lonas/Forração', 'Chapas MDF', 'Lonas Íntegras', 'Cantoneiras/Cintas', 'Tampas/Vedação',
+                'Altura Porta 2,30m', 'Abertura Total', 'Assoalho Liso', 'Peso/Tara Container'
+            ]
+            writer.writerow(cabecalho)
+            
+            for row in rows:
+                linha_limpa = [str(item).replace('\n', ' ').replace('\r', '') if item is not None else '-' for item in row]
+                writer.writerow(linha_limpa)
+                
+            response = make_response(output.getvalue().encode('utf-8-sig'))
+            response.headers["Content-Disposition"] = f"attachment; filename=Relatorio_Patio_{data_inicio}_a_{data_fim}.csv"
+            response.headers["Content-type"] = "text/csv"
+            return response
+
+        # ==============================================================
+        # 🔴 OPÇÃO 2: PDF (Visual Executivo com Quantidades e Paletes)
+        # ==============================================================
+        elif formato == 'pdf':
+            
+            # 1. Descobrir todas as pré-ordens desse relatório
+            todas_pos = set()
+            for row in rows:
+                if row[8]: 
+                    for p in str(row[8]).replace('/', ',').split(','):
+                        if p.strip().isdigit():
+                            todas_pos.add(p.strip())
+            
+            # 2. Busca no ERP (Pedidos, Embarques, Produtos, Quantidades e Paletes)
+            info_erp = {}
+            if todas_pos:
+                try:
+                    cur_erp = conn.cursor()
+                    
+                    # --- BUSCA PEDIDOS E EMBARQUES ---
+                    cur_erp.execute("""
+                        SELECT CAST(a."PED_PRE_ORDEM" AS VARCHAR), a."PED_NUMERO", b."EMB_NUMERO"
+                        FROM "APEDIDOS" a 
+                        LEFT JOIN "AEMBARITE" b ON a."PED_NUMERO" = b."EMB_PEDIDO" AND a."PED_EMPRESA" = b."EMB_EMPRESA" 
+                        WHERE a."PED_PRE_ORDEM" IN %s
+                    """, (tuple(todas_pos),))
+                    
+                    for po, ped, emb in cur_erp.fetchall():
+                        po_str = str(po).strip()
+                        if po_str not in info_erp: info_erp[po_str] = {'ped': set(), 'emb': set(), 'produtos': set()}
+                        if ped: info_erp[po_str]['ped'].add(str(ped))
+                        if emb: info_erp[po_str]['emb'].add(str(emb))
+                    
+                    # --- BUSCA PRODUTOS COM SOMA DE QUANTIDADES E TIPO DE PALETE ---
+                    sql_produtos_pdf = """
+                        SELECT 
+                            CAST(x."PED_PRE_ORDEM" AS VARCHAR),
+                            z."PRD_DESC_RES", 
+                            SUM(y."PED_QUANT") as quantidade_total, 
+                            z."PRD_UNID", 
+                            CASE 
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END AS tipo_palete_final
+                        FROM "APEDIDOS" x
+                        JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                        JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                        LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
+                        WHERE x."PED_PRE_ORDEM" IN %s 
+                        GROUP BY 
+                            x."PED_PRE_ORDEM",
+                            z."PRD_DESC_RES", 
+                            z."PRD_UNID", 
+                            u."PES_TP_PALET",
+                            s."PLT_DESC_TIPO"
+                    """
+                    cur_erp.execute(sql_produtos_pdf, (tuple(todas_pos),))
+                    
+                    for po, prd_nome, qtd, unid, palete in cur_erp.fetchall():
+                        po_str = str(po).strip()
+                        if po_str in info_erp and prd_nome:
+                            # Converte os dados do banco
+                            qtd_num = float(qtd) if qtd is not None else 0
+                            unidade = str(unid).strip().upper() if unid else ""
+                            tipo_palete = str(palete).strip().upper()
+                            
+                            # Regra do Granel (Herdada do seu Dashboard)
+                            if derivado == 'Sim' or unidade == 'TON':
+                                tipo_palete = 'A GRANEL'
+                                
+                            # Matemática de Paletes
+                            qtd_paletes_str = ""
+                            if tipo_palete in ['PBR', 'CHEP', 'CHEPC']:
+                                divisor = None
+                                desc_upper = prd_nome.upper()
+                                if "6X5" in desc_upper: divisor = 36
+                                elif "10X1" in desc_upper: divisor = 100
+                                elif "5X2" in desc_upper: divisor = 104
+                                    
+                                if divisor and (qtd_num % divisor == 0):
+                                    qtd_paletes_str = f" ({int(qtd_num / divisor)} PLTs)"
+                                    
+                            # Formatação Bonita (Ex: 150 FD | 1200.50 KG)
+                            qtd_fmt = f"{int(qtd_num)}" if qtd_num % 1 == 0 else f"{qtd_num:.2f}"
+                            unid_fmt = "FD" if unidade == 'FD' else unidade
+                            
+                            # Monta a string final: "ARROZ BRANCO - 150 FD [PBR] (5 PLTs)"
+                            linha_produto = f"{prd_nome.strip()} - {qtd_fmt} {unid_fmt} <b>[{tipo_palete}]</b> <span style='color:#718096; font-size:8px;'>{qtd_paletes_str}</span>"
+                            
+                            info_erp[po_str]['produtos'].add(linha_produto)
+                            
+                except Exception as e:
+                    print("⚠️ Erro ao buscar dados ERP para o PDF:", e)
+
+            # 3. Monta o HTML do PDF Executivo
+            html = f"""
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Relatório de Pátio</title>
+                <style>
+                    body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 20px; color: #2d3748; }}
+                    .header {{ border-bottom: 3px solid #6b2b1f; padding-bottom: 10px; margin-bottom: 20px; }}
+                    h2 {{ color: #6b2b1f; margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }}
+                    
+                    .filtros {{ background: #f7fafc; padding: 12px 15px; border-radius: 8px; font-size: 11px; margin-bottom: 20px; border: 1px solid #e2e8f0; color: #4a5568; line-height: 1.5; }}
+                    .filtros strong {{ color: #1a202c; }}
+                    
+                    table {{ width: 100%; border-collapse: collapse; font-size: 10px; }}
+                    th, td {{ border-bottom: 1px solid #e2e8f0; padding: 8px 6px; text-align: left; vertical-align: top; }}
+                    th {{ background-color: #edf2f7; color: #4a5568; text-transform: uppercase; font-weight: bold; font-size: 9px; letter-spacing: 0.5px; }}
+                    tr:nth-child(even) {{ background-color: #f8fafc; }}
+                    
+                    /* Design das Badges de Status */
+                    .status {{ font-weight: bold; font-size: 9px; padding: 4px 6px; border-radius: 4px; display: inline-block; text-transform: uppercase; border: 1px solid rgba(0,0,0,0.1); }}
+                    .bg-pendente {{ background: #fefcbf; color: #975a16; }}
+                    .bg-vistoriado {{ background: #ebf8ff; color: #2b6cb0; }}
+                    .bg-carregando {{ background: #feebc8; color: #c05621; }}
+                    .bg-carregado {{ background: #f0fff4; color: #2f855a; }}
+                    .bg-cancelado {{ background: #fff5f5; color: #c53030; }}
+                    
+                    /* Design dos Produtos */
+                    .produtos-lista div {{ border-bottom: 1px dashed #cbd5e0; padding-bottom: 4px; margin-bottom: 4px; color: #2d3748; font-weight: 500; font-size: 9.5px; }}
+                    .produtos-lista div:last-child {{ border-bottom: none; margin-bottom: 0; padding-bottom: 0; }}
+                    .bold-dark {{ color: #1a202c; font-weight: bold; }}
+                </style>
+            </head>
+            <body onload="window.print();">
+                <div class="header">
+                    <h2>Relatório Gerencial de Operação</h2>
+                </div>
+                
+                <div class="filtros">
+                    <strong>Período:</strong> {data_inicio} até {data_fim} &nbsp;|&nbsp; 
+                    <strong>Status:</strong> {status} &nbsp;|&nbsp; 
+                    <strong>Unidade:</strong> {local} &nbsp;|&nbsp; 
+                    <strong>Tipo:</strong> {texto_tipo_filtro} &nbsp;|&nbsp;
+                    <strong>Transportadora:</strong> {transportadora or 'Todas'} <br>
+                    <strong>Total de Veículos no Relatório:</strong> {len(rows)}
+                </div>
+                
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 5%;">Hora</th>
+                            <th style="width: 8%;">Placa</th>
+                            <th style="width: 15%;">Transportadora</th>
+                            <th style="width: 8%;">Pré-Ordem</th>
+                            <th style="width: 8%;">Pedido</th>
+                            <th style="width: 8%;">Embarque</th>
+                            <th style="width: 10%;">Status</th>
+                            <th style="width: 38%;">Produtos (SKU) - Qtd [Palete]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            """
+            
+            # 4. Preenche as linhas cruzando o banco local com o ERP
+            for row in rows:
+                placa = row[0]
+                hora_inicio = row[2] or "--:--"
+                status_patio = row[6] or "PENDENTE"
+                pre_ordens = str(row[8]) if row[8] else ""
+                transportadora = row[9] or "NÃO INFORMADA"
+                
+                peds, embs, prods = set(), set(), set()
+                
+                if pre_ordens:
+                    for p in pre_ordens.replace('/', ',').split(','):
+                        p_clean = p.strip()
+                        if p_clean in info_erp:
+                            peds.update(info_erp[p_clean]['ped'])
+                            embs.update(info_erp[p_clean]['emb'])
+                            prods.update(info_erp[p_clean]['produtos'])
+                
+                ped_str = "<br>".join(peds) if peds else "-"
+                emb_str = "<br>".join(embs) if embs else "-"
+                po_str = "<br>".join([p.strip() for p in pre_ordens.replace('/', ',').split(',')]) if pre_ordens else "-"
+                
+                if prods:
+                    html_produtos = "<div class='produtos-lista'>" + "".join([f"<div>• {prd}</div>" for prd in prods]) + "</div>"
+                else:
+                    html_produtos = "<span style='color: #a0aec0;'>Aguardando ERP...</span>"
+                
+                cor_status = "bg-pendente"
+                if status_patio == 'VISTORIADO': cor_status = "bg-vistoriado"
+                elif status_patio == 'CARREGANDO': cor_status = "bg-carregando"
+                elif status_patio == 'CARREGADO': cor_status = "bg-carregado"
+                elif status_patio == 'CANCELADO': cor_status = "bg-cancelado"
+                
+                html += f"""
+                    <tr>
+                        <td class="bold-dark">{hora_inicio}</td>
+                        <td class="bold-dark">{placa}</td>
+                        <td>{transportadora}</td>
+                        <td style="color: #2b6cb0; font-weight: bold;">{po_str}</td>
+                        <td>{ped_str}</td>
+                        <td>{emb_str}</td>
+                        <td><span class='status {cor_status}'>{status_patio}</span></td>
+                        <td>{html_produtos}</td>
+                    </tr>
+                """
+            
+            html += """
+                    </tbody>
+                </table>
+            </body>
+            </html>
+            """
+            return make_response(html)
+
+    except Exception as e:
+        print(f"❌ Erro ao exportar relatório: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
 
 
 if __name__ == "__main__":

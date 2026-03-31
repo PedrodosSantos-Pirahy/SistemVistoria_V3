@@ -7,7 +7,12 @@ import traceback
 import sys
 import os
 import base64
+from pypdf import PdfWriter
 import io
+import platform
+import subprocess
+import tempfile
+
 
 app = Flask(__name__)
 
@@ -603,7 +608,10 @@ def get_detalhes_vistoria(id_agendamento):
                 r.placa_2, r.placa_3,
                 
                 -- [37-40] Específicos
-                r.chk_porta_altura, r.chk_abertura_total, r.chk_assoalho_liso, r.chk_peso_container
+                r.chk_porta_altura, r.chk_abertura_total, r.chk_assoalho_liso, r.chk_peso_container,
+
+                -- [41] Puxando se a carga é derivado (Retorna True ou False)
+                a.derivado
 
             FROM "vistoria"."VAGENDAMENTO" a
             LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
@@ -616,9 +624,27 @@ def get_detalhes_vistoria(id_agendamento):
         
         cur.execute(sql_base, (id_agendamento,))
         row = cur.fetchone()
-        
+
         if not row:
             return jsonify({"encontrado": False, "mensagem": "Agendamento não encontrado"}), 404
+
+        # Verifica se é derivado e se o PDF do ERP existe
+        is_derivado = bool(row[41])
+        tem_pdf_embarque = False
+        data_iso = row[2].strftime('%Y-%m-%d') if row[2] else None # Formatamos para YYYY-MM-DD
+        
+        if not is_derivado and row[1] and row[2]:
+            # Placa sem traço para o ERP (Ex: Mercosul ou Antiga)
+            placa_limpa = str(row[1]).replace('-', '').upper().strip() 
+            try:
+                # Vamos lá no schema 'agr' ver se a ficha existe
+                cur.execute('SELECT 1 FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s LIMIT 1', (placa_limpa, row[2]))
+                if cur.fetchone():
+                    tem_pdf_embarque = True
+            except Exception as e:
+                print(f"⚠️ Aviso Silencioso - Erro ao buscar AEMBFICHA: {e}")
+                
+    
 
         # --- PROCESSAMENTO DAS PRÉ-ORDENS (VINDAS DO AGENDAMENTO) ---
         lista_pre_ordens = []
@@ -677,13 +703,28 @@ def get_detalhes_vistoria(id_agendamento):
 
             # 2. Busca Produtos e Paletes (Agrupados)
             cur.execute("""
-                SELECT z."PRD_DESC_RES", SUM(y."PED_QUANT"), z."PRD_UNID", COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                SELECT 
+                    z."PRD_DESC_RES", 
+                    SUM(y."PED_QUANT") as quantidade_total, 
+                    z."PRD_UNID", 
+                    -- Lógica solicitada:
+                    CASE 
+                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                    END AS tipo_palete_final
                 FROM "APEDIDOS" x
                 JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                 JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s
-                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
+                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
+                WHERE x."PED_PRE_ORDEM" IN %s 
+                GROUP BY 
+                    z."PRD_DESC_RES", 
+                    z."PRD_UNID", 
+                    -- Importante: o GROUP BY deve refletir a lógica do SELECT
+                    u."PES_TP_PALET",
+                    s."PLT_DESC_TIPO"
+                ORDER BY quantidade_total DESC
             """, (tuple(lista_pre_ordens),))
             
             for prd_nome, qtd, unid, palete in cur.fetchall():
@@ -737,7 +778,10 @@ def get_detalhes_vistoria(id_agendamento):
                 "interior1": row[33], "interior2": row[34]
             },
             "tipo_veiculo": row[17],
-            "placas_extras": " / ".join(filter(None, [row[35], row[36]]))
+            "placas_extras": " / ".join(filter(None, [row[35], row[36]])),
+            "is_derivado": is_derivado,
+            "tem_pdf_embarque": tem_pdf_embarque,
+            "data_iso": data_iso
         })
 
     except Exception as e:
@@ -1074,13 +1118,27 @@ def dashboard_carga():
 
         if todas_pre_ordens:
             sql_produtos = """
-                SELECT z."PRD_DESC_RES", SUM(y."PED_QUANT") as quantidade_total, z."PRD_UNID", COALESCE(s."PLT_DESC_TIPO", 'BAT') as tipo_palete
+                SELECT 
+                    z."PRD_DESC_RES", 
+                    SUM(y."PED_QUANT") as quantidade_total, 
+                    z."PRD_UNID", 
+                    -- Lógica solicitada:
+                    CASE 
+                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                    END AS tipo_palete_final
                 FROM "APEDIDOS" x
                 JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                 JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s on y."PED_PALETS" = s."PLT_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s
-                GROUP BY z."PRD_DESC_RES", z."PRD_UNID", s."PLT_DESC_TIPO"
+                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
+                WHERE x."PED_PRE_ORDEM" IN %s 
+                GROUP BY 
+                    z."PRD_DESC_RES", 
+                    z."PRD_UNID", 
+                    -- Importante: o GROUP BY deve refletir a lógica do SELECT
+                    u."PES_TP_PALET",
+                    s."PLT_DESC_TIPO"
                 ORDER BY quantidade_total DESC
             """
             cur.execute(sql_produtos, (tuple(todas_pre_ordens),))
@@ -1089,6 +1147,10 @@ def dashboard_carga():
                 qtd = float(rp[1]) if rp[1] is not None else 0
                 unidade = str(rp[2]).strip().upper() if rp[2] else ""
                 palete = str(rp[3]).strip().upper() 
+
+                # 👇 NOVA REGRA: Se o filtro for 'Sim' (Derivados), a gente força A GRANEL!
+                if derivado_filtro == 'Sim' or unidade == 'TON':
+                    palete = 'A GRANEL' 
 
                 total_fardos += qtd
                 
@@ -1145,6 +1207,53 @@ def dashboard_carga():
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
+
+# No arquivo: historico.a.py
+
+@app.route('/pdf-embarque', methods=['GET'])
+def get_pdf_embarque_erp():
+    # 1. Pegamos apenas a placa e a data
+    placa = request.args.get('placa', '').replace('-', '').upper().strip()
+    data = request.args.get('data', '') 
+    
+    conn = None
+    try:
+        conn = psycopg2.connect(**DB_BUSCA)
+        cur = conn.cursor()
+        
+        cur.execute('SELECT "FE_PDF" FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s', (placa, data))
+        rows = cur.fetchall()
+        
+        if not rows:
+            return jsonify({"error": "PDFs da Ordem de Embarque não encontrados"}), 404
+
+        # 2. Se tiver apenas 1 PDF, extrai os bytes, senão usa o Grampeador (PdfWriter)
+        if len(rows) == 1 and rows[0][0]:
+            pdf_bytes = bytes(rows[0][0])
+        else:
+            writer = PdfWriter() 
+            for row in rows:
+                if row[0]: 
+                    pdf_io = io.BytesIO(row[0]) 
+                    writer.append(pdf_io)       
+
+            output_pdf = io.BytesIO()
+            writer.write(output_pdf) 
+            writer.close()           
+            pdf_bytes = output_pdf.getvalue()
+
+        # 3. DEVOLVE O PDF PARA A TELA (Navegador do PC ou Celular resolve o resto!)
+        response = make_response(pdf_bytes)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'inline; filename=Embarques_{placa}.pdf'
+        return response
+
+    except Exception as e:
+        print(f"❌ Erro ao baixar PDFs Embarque (ERP): {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn: conn.close()
+
 
 if __name__ == "__main__":
     app.run(host='0.0.0.0', port=5002, debug=True, use_reloader=False)
