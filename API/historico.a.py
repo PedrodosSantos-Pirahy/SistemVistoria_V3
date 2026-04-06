@@ -1264,7 +1264,8 @@ def get_pdf_embarque_erp():
 def listar_impressoras():
     print("📞 [API] O Angular acabou de pedir a lista de impressoras!")
     try:
-        resultado = subprocess.run(['lpstat', '-e'], stdout=subprocess.PIPE, text=True)
+        # 🔥 CORREÇÃO: Caminho absoluto /usr/bin/lpstat
+        resultado = subprocess.run(['/usr/bin/lpstat', '-e'], stdout=subprocess.PIPE, text=True)
         impressoras = [imp.strip() for imp in resultado.stdout.strip().split('\n') if imp.strip()]
         
         # 🔥 A BALA RASTREADORA: Forçamos uma impressora inventada na lista!
@@ -1326,9 +1327,8 @@ def imprimir_direto():
             writer.write(tmp)
             caminho_pdf = tmp.name
 
-        # 4. Manda o comando de impressão (O mesmo que você testou no terminal!)
-        # Ex: lp -d Impressora_TI /tmp/arquivo_aleatorio.pdf
-        subprocess.run(['lp', '-d', impressora, caminho_pdf], check=True)
+        # 4. Manda o comando de impressão (Agora com /usr/bin/lp)
+        subprocess.run(['/usr/bin/lp', '-d', impressora, caminho_pdf], check=True)
 
         # 5. Apaga o arquivo temporário para não lotar o servidor
         os.remove(caminho_pdf)
