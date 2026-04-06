@@ -12,6 +12,7 @@ import bcrypt
 from PIL import Image, ImageOps
 from jinja2 import Environment, FileSystemLoader
 from weasyprint import HTML
+from psycopg2 import pool
 
 # pasta_atual = os.path.dirname(os.path.abspath(__file__))
 
@@ -24,12 +25,18 @@ load_dotenv()
 
 DB_BUSCA = {
     "host": os.getenv("DB_HOST"),
-    
     "database": os.getenv("DB_NAME"),
     "user": os.getenv("DB_USER"),
     "password": os.getenv("DB_PASS"),
     "port": os.getenv("DB_PORT")
 }
+# LOGO ABAIXO DO DB_BUSCA, CRIE O POOL ASSIM:
+try:
+    db_pool = pool.ThreadedConnectionPool(1, 20, **DB_BUSCA)
+    if db_pool:
+        print("✅ Pool de conexões criado com sucesso!")
+except Exception as e:
+    print(f"❌ ERRO CRÍTICO ao criar o pool de conexões: {e}")
 
 # Log para avisar que o servidor iniciou
 print("----------------------------------------------------------")
@@ -100,30 +107,18 @@ def classificar_data_db(data_obj):
 
 def get_pendencias_db(filter_date=None):
     conn = None
+    cur = None
     try:
-        # 🔥 ALTERAÇÃO: Conecta no DB_BUSCA
-        conn = psycopg2.connect(**DB_BUSCA)
+        # 🔥 1. AGORA USA O POOL (Conecta em 1 milissegundo)
+        conn = db_pool.getconn()
         cur = conn.cursor()
 
+        # 🔥 2. SQL LIMPO: Sem a subquery de Regex pesada! Trazemos a resposta instantaneamente.
         sql = """
             SELECT 
                 a.id, a.placa, a.data, a.hr_inicio, a.local, 
-                CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')) as todas_ordens,
-                
-                -- BUSCA SEGURA: Pega só a primeira transportadora e encerra (LIMIT 1)
-                COALESCE(
-                    (SELECT y2."TRP_NOME" 
-                     FROM "UTRAPLACA" x2 
-                     JOIN "UTRAPROPR" y2 ON x2."PLA_PROPR" = y2."TRP_CODIGO" 
-                     WHERE REGEXP_REPLACE(UPPER(x2."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') 
-                     LIMIT 1), 
-                    'Consultar Cadastro'
-                ) as transportadora_oficial
-                
+                CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')) as todas_ordens
             FROM "vistoria"."VAGENDAMENTO" a
-            
-            -- 🔥 AS LINHAS DO 'LEFT JOIN UTRAPLACA' FORAM DELETADAS DAQUI! 🔥
-            
             WHERE a.data >= CURRENT_DATE
             AND NOT EXISTS (
                 SELECT 1 FROM "vistoria"."VRESPOSTAS" r 
@@ -136,14 +131,37 @@ def get_pendencias_db(filter_date=None):
         cur.execute(sql)
         rows = cur.fetchall()
         
+        # 🔥 3. CACHE DE TRANSPORTADORAS (A mágica da velocidade)
+        # Pega todas as placas da tela e faz UMA ÚNICA pergunta ao banco.
+        placas_pendentes = set()
+        for row in rows:
+            if row[1]: placas_pendentes.add(row[1].upper().replace("-", "").strip())
+
+        transp_cache = {}
+        if placas_pendentes:
+            cur_transp = conn.cursor()
+            cur_transp.execute("""
+                SELECT REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g'), y."TRP_NOME"
+                FROM "UTRAPLACA" x
+                JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
+                WHERE REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g') IN %s
+            """, (tuple(placas_pendentes),))
+            
+            for p, t in cur_transp.fetchall():
+                transp_cache[p] = t
+            cur_transp.close()
+
         pendencias = []
         agora = datetime.now()
         hoje = agora.date()
 
         for row in rows:
-            db_id, db_placa, db_data, db_hora, db_local, db_ordens_concat, db_transp = row
+            db_id, db_placa, db_data, db_hora, db_local, db_ordens_concat = row
 
-            # Formata a data aqui (Ex: "12/02/2026")
+            # Pega a transportadora do cache rápido que acabamos de montar
+            placa_limpa = db_placa.upper().replace("-", "").strip() if db_placa else ""
+            db_transp = transp_cache.get(placa_limpa, 'Consultar Cadastro')
+
             data_visivel = db_data.strftime("%d/%m/%Y") if db_data else ""
             hora_visivel = str(db_hora)[:5] if db_hora else "00:00"
 
@@ -157,7 +175,7 @@ def get_pendencias_db(filter_date=None):
             status_temp = "Pendente"
             
             if db_data > hoje: 
-                status_temp = data_visivel  # 🔥 AQUI A MUDANÇA: Usa a string formatada
+                status_temp = data_visivel  
             elif db_data == hoje:
                 diferenca = (data_hora_agendamento - agora).total_seconds() / 60
                 if diferenca < -20: status_temp = "Expirado"
@@ -186,7 +204,8 @@ def get_pendencias_db(filter_date=None):
         traceback.print_exc()
         return []
     finally:
-        if conn: conn.close()
+        if cur: cur.close()
+        if conn: db_pool.putconn(conn) # 🔥 Devolve a conexão pro Pool!
 
 # Middleware para logar
 @app.before_request
@@ -206,6 +225,7 @@ def log_request_info():
 @app.route('/consultar-placa/<placa>', methods=['GET'])
 def consultar_placa(placa):
     conn = None
+    cur = None
     try:
         # 🔥 ALTERAÇÃO: Conecta no DB_BUSCA
         conn = psycopg2.connect(**DB_BUSCA)
@@ -233,7 +253,12 @@ def consultar_placa(placa):
         print(f"❌ Erro ao consultar placa: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        if conn: conn.close()
+        # 3. Feche o cursor se ele foi criado
+        if cur:
+            cur.close()
+        # 4. Só devolva a conexão se você realmente conseguiu pegar ela
+        if conn:
+            db_pool.putconn(conn)
 
 # No arquivo: agend.py
 
