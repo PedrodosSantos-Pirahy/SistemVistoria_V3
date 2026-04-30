@@ -33,8 +33,8 @@
                 </button>
               }
 
-              @if (isExpedicao()) {
-                <button (click)="setView('agendamento')" 
+              @if (podeAgendar()) {
+                <button (click)="setView('agendamento')"
                         [class.border-b-2]="view() === 'agendamento'"
                         [class.border-[#6b2b1f]]="view() === 'agendamento'"
                         class="px-3 py-2 text-sm font-bold text-gray-700 hover:text-[#6b2b1f] transition h-full border-transparent">
@@ -43,11 +43,16 @@
               }
 
               @if (podeVerMonitoramento()) {
-                <button (click)="setView('monitoramento')" 
+                <button (click)="setView('monitoramento')"
                         [class.border-b-2]="view() === 'monitoramento'"
                         [class.border-[#6b2b1f]]="view() === 'monitoramento'"
-                        class="px-3 py-2 text-sm font-bold text-gray-700 hover:text-[#6b2b1f] transition h-full border-transparent">
+                        class="relative px-3 py-2 text-sm font-bold text-gray-700 hover:text-[#6b2b1f] transition h-full border-transparent">
                   Monitorar Pátio
+                  @if (temAgendSemPlaca()) {
+                    <span class="absolute top-1 right-0 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-black animate-pulse">
+                      {{ qtdAgendSemPlaca() }}
+                    </span>
+                  }
                 </button>
               }
               @if (podeVerCarregamento()) {
@@ -84,7 +89,7 @@
         @if (isVistoriador()) {
           <button (click)="setView('list')" class="text-xs font-bold text-gray-600">PAINEL</button>
         }
-        @if (isExpedicao()) {
+        @if (podeAgendar()) {
           <button (click)="setView('agendamento')" class="text-xs font-bold text-gray-600">AGENDAR</button>
         }
         @if (podeVerMonitoramento()) {

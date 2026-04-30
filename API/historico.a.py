@@ -9,7 +9,7 @@ import traceback
 import sys
 import os
 import base64
-from pypdf import PdfWriter
+from pypdf import PdfWriter, PdfReader
 import io
 import platform
 import subprocess
@@ -75,6 +75,7 @@ def get_historico():
         cur = conn.cursor()
 
         # 2. Filtros Dinâmicos
+       # 2. Filtros Dinâmicos
         where_parts = ["1=1"]
         params_query = []
 
@@ -84,11 +85,13 @@ def get_historico():
 
         if placa_filtro:
             placa_limpa = placa_filtro.replace('-', '')
-            where_parts.append("REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') LIKE %s")
+            # 👇 CORREÇÃO: Adicionamos o 'AND ' aqui no começo!
+            where_parts.append("AND REGEXP_REPLACE(UPPER(a.placa), '[^A-Z0-9]', '', 'g') LIKE %s")
             params_query.append(f"%{placa_limpa}%")
 
         if transp_filtro:
-            where_parts.append("UPPER(COALESCE(r.transportadora, '')) LIKE %s")
+            # 👇 CORREÇÃO: Adicionamos o 'AND ' aqui no começo também!
+            where_parts.append("AND UPPER(COALESCE(r.transportadora, '')) LIKE %s")
             params_query.append(f"%{transp_filtro}%")
 
         where_final = "WHERE " + " ".join(where_parts)
@@ -215,38 +218,34 @@ def get_agendamentos_dia():
         cur = conn.cursor()
         
         # SQL com 3 parâmetros (%s) para garantir que a data e o local batam sempre
-        # No arquivo historico.a.py
         sql = """
-            SELECT a.hr_inicio, a.hr_fim, a.id
+            SELECT a.hr_inicio, a.hr_fim, a.id, COALESCE(a.derivado, FALSE) AS derivado
             FROM "vistoria"."VAGENDAMENTO" a
             WHERE (
-                CAST(a.data AS DATE) = CAST(%s AS DATE) 
+                CAST(a.data AS DATE) = CAST(%s AS DATE)
                 OR to_char(a.data, 'YYYY-MM-DD') = %s
             )
-            -- ✅ CORRIGIDO: TRIM remove espaços extras que podem vir do banco
-            AND UPPER(TRIM(a.local)) = UPPER(TRIM(%s)) 
+            AND UPPER(TRIM(a.local)) = UPPER(TRIM(%s))
             AND NOT EXISTS (
-                SELECT 1 
-                FROM "vistoria"."VRESPOSTAS" r 
-                WHERE CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR) 
+                SELECT 1
+                FROM "vistoria"."VRESPOSTAS" r
+                WHERE CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
                 AND r.status = 'Cancelada'
             )
         """
-        # Passando os 3 parâmetros corretamente
         cur.execute(sql, (data_str, data_str, local_str))
-                
 
         rows = cur.fetchall()
-        
+
         ocupacoes = []
         for row in rows:
-            # O row[0] e row[1] são hr_inicio e hr_fim
-            inicio = str(row[0])[:5] if row[0] else None
-            fim = str(row[1])[:5] if row[1] else None
+            inicio   = str(row[0])[:5] if row[0] else None
+            fim      = str(row[1])[:5] if row[1] else None
             id_agend = str(row[2])
-            
+            derivado = bool(row[3])
+
             if inicio and fim:
-                ocupacoes.append({"inicio": inicio, "fim": fim, "id": id_agend})
+                ocupacoes.append({"inicio": inicio, "fim": fim, "id": id_agend, "derivado": derivado})
 
         return jsonify(ocupacoes)
 
@@ -369,7 +368,6 @@ def monitoramento_excel():
         total_items = cur.fetchone()[0]
         total_pages = (total_items + per_page - 1) // per_page
 
-        # 🔥 CORREÇÃO 2: Removido o Regex Subquery Pesado de Transportadora!
         sql_dados = f"""
             SELECT
                 a.id, 
@@ -384,13 +382,13 @@ def monitoramento_excel():
                 ),
                 
                 r.transportadora, -- Vamos resolver no Python se for Nulo
-                
-                r.status, 
+
+                r.status,
                 r.caminhao_liberado, r.motorista, r.vistoriador,
                 CASE WHEN r.pdf_documento IS NOT NULL THEN r.id ELSE NULL END,
                 CAST(EXTRACT(EPOCH FROM (a.hr_fim - a.hr_inicio))/60 AS INTEGER),
                 a.local, a.pre_ordem1, a.pre_ordem2, a.pre_ordem3, a.pre_ordem4, a.pre_ordem5,
-                
+
                 a.data,
                 a.hr_inicio,
                 COALESCE(a.status_patio, 'PENDENTE'),
@@ -427,6 +425,18 @@ def monitoramento_excel():
         transp_cache = {}
         patio_cache = {}
         saida_cache = {}
+        vtranstemp_cache = {}
+
+        # IDs sem placa → busca transportadora em VTRANSTEMP (1 query)
+        ids_sem_placa = [r[0] for r in rows if not r[1]]
+        if ids_sem_placa:
+            cur.execute("""
+                SELECT "ID_AGEND", "TRANSPORTADORA"
+                FROM "vistoria"."VTRANSTEMP"
+                WHERE "ID_AGEND" IN %s
+            """, (tuple(ids_sem_placa),))
+            for id_ag, transp_temp in cur.fetchall():
+                vtranstemp_cache[id_ag] = transp_temp
 
         if placas_na_pagina:
             # Puxa transportadoras em bloco
@@ -452,11 +462,21 @@ def monitoramento_excel():
             
             # Puxa Saída em Bloco
             cur.execute("""
-                SELECT b."MV_PLACA1", a."MV_DT_ENT_SAI", a."MV_DTH_LANC"::TIME FROM "AMOVPRI" a
+                SELECT 
+                    b."MV_PLACA1", 
+                    to_char(a."MV_DT_ENT_SAI", 'DD/MM/YYYY'), -- Formatação forçada!
+                    a."MV_DTH_LANC"::TIME 
+                FROM "AMOVPRI" a
                 LEFT JOIN "AMOVTRA" b on b."MV_EMPRESA" = a."MV_EMPRESA" and b."MV_LOCAL" = a."MV_LOCAL" and b."MV_NOTA" = a."MV_NOTA"
                 LEFT JOIN "AMOVITE" c on c."MV_EMPRESA" = a."MV_EMPRESA" and c."MV_LOCAL" = a."MV_LOCAL" and c."MV_NOTA" = a."MV_NOTA"
                 LEFT JOIN "AOPERACAO" d ON c."MV_OPERACAO" = d."OPER_CODIGO" AND c."MV_EMPRESA" = d."OPER_EMPRESA"
-                WHERE b."MV_PLACA1" IN %s AND a."MV_DT_ENT_SAI" IN %s AND a."MV_SERIE" = 'ROM' AND d."OPER_DESCRICAO" = 'CARREGAMENTO'
+                
+                WHERE b."MV_PLACA1" IN %s
+                  AND to_char(a."MV_DT_ENT_SAI", 'DD/MM/YYYY') IN %s
+                  -- ⚠️ AVISO SÊNIOR: Se o seu número for uma Nota e não um Romaneio, 
+                  -- você precisa alterar o 'ROM' abaixo ou permitir outras séries.
+                  AND a."MV_SERIE" = 'ROM' 
+                  AND d."OPER_DESCRICAO" = 'CARREGAMENTO'
             """, (tuple(placas_na_pagina), tuple(datas_na_pagina)))
             for rs_placa, rs_data, rs_hora in cur.fetchall():
                 key = f"{rs_placa}_{rs_data}"
@@ -479,7 +499,7 @@ def monitoramento_excel():
             status_salvo_banco = r[21] 
             
             # Define a transportadora: Usa a gravada ou o Cache Rápido
-            transp = r[6] if r[6] else transp_cache.get(placa_limpa, 'Aguardando...')
+            transp = r[6] or transp_cache.get(placa_limpa) or vtranstemp_cache.get(id_agend) or 'Aguardando...'
             
             novo_status = status_salvo_banco
             data_erp = data_agend.strftime('%d/%m/%Y') if data_agend else ""
@@ -650,8 +670,8 @@ def get_detalhes_vistoria(id_agendamento):
             # Placa sem traço para o ERP (Ex: Mercosul ou Antiga)
             placa_limpa = str(row[1]).replace('-', '').upper().strip() 
             try:
-                # Vamos lá no schema 'agr' ver se a ficha existe
-                cur.execute('SELECT 1 FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s LIMIT 1', (placa_limpa, row[2]))
+                # Verifica sobre a ficha
+                cur.execute('SELECT 1 FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s AND "FE_PDF" IS NOT NULL LIMIT 1', (placa_limpa, row[2]))
                 if cur.fetchone():
                     tem_pdf_embarque = True
             except Exception as e:
@@ -716,28 +736,34 @@ def get_detalhes_vistoria(id_agendamento):
 
             # 2. Busca Produtos e Paletes (Agrupados)
             cur.execute("""
-                SELECT 
-                    z."PRD_DESC_RES", 
-                    SUM(y."PED_QUANT") as quantidade_total, 
-                    z."PRD_UNID", 
-                    -- Lógica solicitada:
-                    CASE 
-                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
-                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
-                    END AS tipo_palete_final
-                FROM "APEDIDOS" x
-                JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
-                JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
-                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s 
-                GROUP BY 
-                    z."PRD_DESC_RES", 
-                    z."PRD_UNID", 
-                    -- Importante: o GROUP BY deve refletir a lógica do SELECT
-                    u."PES_TP_PALET",
-                    s."PLT_DESC_TIPO"
-                ORDER BY quantidade_total DESC
+                                    SELECT 
+                            z."PRD_DESC_RES", 
+                            SUM(y."PED_QUANT") as quantidade_total, 
+                            z."PRD_UNID",
+                            CASE 
+                                -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                -- Caso contrário, retorna o valor padrão
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END AS tipo_palete_final
+                        FROM "APEDIDOS" x
+                        JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                        JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                        LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
+                        WHERE x."PED_PRE_ORDEM" IN %s
+                        -- O GROUP BY leva o CASE inteiro!
+                        GROUP BY 
+                            z."PRD_DESC_RES", 
+                            z."PRD_UNID", 
+                            CASE 
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END
+                        ORDER BY quantidade_total DESC;
             """, (tuple(lista_pre_ordens),))
             
             for prd_nome, qtd, unid, palete in cur.fetchall():
@@ -851,7 +877,6 @@ def get_foto_banco(id_agendamento, tipo):
         if conn: conn.close()
 
         
-# No arquivo: historico.a.py
 
 @app.route('/verificar-duplicidade', methods=['GET'])
 def verificar_duplicidade():
@@ -941,17 +966,19 @@ def dashboard_carga():
 
         where_clause = " AND ".join(where_parts)
 
-        # 🔥 CORREÇÃO 1: Removido o Correlated Subquery pesadíssimo daqui
         sql_agendamentos = f"""
-            SELECT 
-                a.id, a.placa, a.hr_inicio, 
-                r.transportadora, -- Pegamos só o que já tá salvo na vistoria por enquanto
+            SELECT
+                a.id, a.placa, a.hr_inicio,
+                r.transportadora,
                 a.pre_ordem1, a.pre_ordem2, a.pre_ordem3, a.pre_ordem4, a.pre_ordem5,
                 r.status, COALESCE(a.status_patio, 'PENDENTE'), a.data,
                 r.vistoria_fim,
-                a.hr_fim, a.local 
+                a.hr_fim, a.local,
+                COALESCE(a.ficha_impressa, FALSE) as ficha_impressa,
+                t."TRANSPORTADORA" as transp_agend
             FROM "vistoria"."VAGENDAMENTO" a
             LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
+            LEFT JOIN "vistoria"."VTRANSTEMP" t ON t."ID_AGEND" = a.id
             WHERE {where_clause}
             ORDER BY a.hr_inicio ASC
         """
@@ -1034,12 +1061,13 @@ def dashboard_carga():
 
         for row in agendamentos_do_dia:
             id_agend, placa, hr_inicio, transp_banco, p1, p2, p3, p4, p5, status_resp, status_patio, data_agend, vistoria_fim = row[:13]
-            hr_fim, local_agend = row[13], row[14]
-            
+            hr_fim, local_agend, ficha_impressa = row[13], row[14], row[15]
+            transp_agend = row[16] if len(row) > 16 else None
+
             placa_limpa = placa.upper().replace("-", "").strip() if placa else ""
-            
-            # Resolve a transportadora usando o Cache super-rápido (se não tem salva, busca no cache)
-            transp = transp_banco if transp_banco else transp_cache.get(placa_limpa, 'NÃO IDENTIFICADA')
+
+            # Prioridade: transportadora da vistoria > cache ERP pela placa > transportadora salva no agendamento
+            transp = transp_banco or transp_cache.get(placa_limpa) or transp_agend or 'NÃO IDENTIFICADA'
             
             novo_status = status_patio
             hora_exibicao = str(hr_inicio)[:5] if hr_inicio else "--:--"
@@ -1115,7 +1143,8 @@ def dashboard_carga():
                     "data": data_agend.strftime('%d/%m/%Y') if data_agend else "",
                     "h_inicio": str(hr_inicio)[:5] if hr_inicio else "--:--",
                     "h_fim": str(hr_fim)[:5] if hr_fim else "--:--",
-                    "local": local_agend or "Matriz"
+                    "local": local_agend or "Matriz",
+                    "impresso": ficha_impressa
                 })
 
         # 🔥 CORREÇÃO 2.2: Grava TODOS os status no banco numa viagem só!
@@ -1129,23 +1158,34 @@ def dashboard_carga():
 
         if todas_pre_ordens:
             sql_produtos = """
-                SELECT 
-                    z."PRD_DESC_RES", 
-                    SUM(y."PED_QUANT") as quantidade_total, 
-                    z."PRD_UNID", 
-                    CASE 
-                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
-                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
-                    END AS tipo_palete_final
-                FROM "APEDIDOS" x
-                JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
-                JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
-                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s 
-                GROUP BY 
-                    z."PRD_DESC_RES", z."PRD_UNID", u."PES_TP_PALET", s."PLT_DESC_TIPO"
-                ORDER BY quantidade_total DESC
+                                    SELECT 
+                            z."PRD_DESC_RES", 
+                            SUM(y."PED_QUANT") as quantidade_total, 
+                            z."PRD_UNID",
+                            CASE 
+                                -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                -- Caso contrário, retorna o valor padrão
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END AS tipo_palete_final
+                        FROM "APEDIDOS" x
+                        JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                        JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                        LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
+                        WHERE x."PED_PRE_ORDEM" IN %s
+                        -- O GROUP BY leva o CASE inteiro!
+                        GROUP BY 
+                            z."PRD_DESC_RES", 
+                            z."PRD_UNID", 
+                            CASE 
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END
+                        ORDER BY quantidade_total DESC;
             """
             cur.execute(sql_produtos, (tuple(todas_pre_ordens),))
             for rp in cur.fetchall():
@@ -1283,6 +1323,7 @@ def listar_impressoras():
 @app.route('/imprimir-direto', methods=['POST'])
 def imprimir_direto():
     dados = request.json
+    id_agend = dados.get('id')
     placa = dados.get('placa', '').replace('-', '').upper().strip()
     data = dados.get('data', '')
     impressora = dados.get('impressora', '')
@@ -1303,8 +1344,7 @@ def imprimir_direto():
             return jsonify({"error": "Ficha não encontrada no ERP"}), 404
 
         # 2. Usa a nossa velha e confiável "Tesoura Digital" (A4 Perfeito)
-        from pypdf import PdfWriter, PdfReader
-        import io
+        
         writer = PdfWriter()
         A4_W, A4_H = 595.28, 841.89
 
@@ -1332,6 +1372,13 @@ def imprimir_direto():
 
         # 5. Apaga o arquivo temporário para não lotar o servidor
         os.remove(caminho_pdf)
+
+        # 6. Trava no banco que a ficha foi para a impressora
+        sql_update = 'UPDATE "vistoria"."VAGENDAMENTO" SET ficha_impressa = TRUE WHERE id = %s'
+        
+        # 👇 CORREÇÃO: Passamos apenas o id_agend para preencher o %s
+        cur.execute(sql_update, (id_agend,)) 
+        conn.commit()
 
         return jsonify({"message": "✅ Ficha enviada para a impressora com sucesso!"}), 200
 

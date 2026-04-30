@@ -36,6 +36,10 @@ export class ApiService {
     return this.http.get<{ transportadora: string }>(`${this.URL_PRINCIPAL}/consultar-placa/${placa}`);
   }
 
+  buscarTransportadoras(q: string): Observable<{codigo: string, nome: string}[]> {
+    return this.http.get<{codigo: string, nome: string}[]>(`${this.URL_PRINCIPAL}/transportadoras?q=${encodeURIComponent(q)}`);
+  }
+
   criarAgendamento(payload: any): Observable<any> {
     return this.http.post<any>(`${this.URL_PRINCIPAL}/criar-agendamento`, payload);
   }
@@ -63,7 +67,7 @@ export class ApiService {
 // No arquivo app.service.ts
 // No arquivo app.service.ts
 // 🔥 CORREÇÃO: Adicionamos o "derivado: string" no final dos parâmetros
-getMonitoramento(page: number, limit: number, busca: string, local: string, status: string, erp: string, derivado: string, criador: string = '') {
+getMonitoramento(page: number, limit: number, busca: string, local: string, status: string, erp: string, derivado: string, criador: string = ''): import('rxjs').Observable<any> {
     let params = new HttpParams()
       .set('page', page.toString())
       .set('limit', limit.toString());

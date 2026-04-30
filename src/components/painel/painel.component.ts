@@ -215,14 +215,14 @@ readonly vistoriasFiltradas = computed(() => {
     const localAtual = this.tipoLocal(); // Vê qual botão de local está marcado (ex: 'Filial')
 
     // 1. Primeiro filtra pelo local ativo
-    const listaDoLocal = lista.filter(item => 
+    const listaDoLocal = lista.filter((item: Inspection) =>
       localAtual === 'Qualquer' ? true : item.local === localAtual
     );
 
     // 2. Agora conta baseado nessa lista filtrada
     return {
-      hoje: listaDoLocal.filter(i => i.categoria_data === 'Data Atual').length,
-      futuras: listaDoLocal.filter(i => i.categoria_data === 'Datas Futuras').length,
+      hoje: listaDoLocal.filter((i: Inspection) => i.categoria_data === 'Data Atual').length,
+      futuras: listaDoLocal.filter((i: Inspection) => i.categoria_data === 'Datas Futuras').length,
       
       // Total pendente da unidade selecionada
       total: listaDoLocal.length 

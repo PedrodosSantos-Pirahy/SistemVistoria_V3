@@ -48,9 +48,10 @@ export class MonitoramentoComponent implements OnInit {
   usuarioNomeLogado = ''; // Variável simples para o nome fixo
   
 // 🔒 CONTROLE DE ACESSO
-  isTI = signal(false); // signal para permissão
-  isCarregamento = signal(false); // Permissão para o pessoal do pátio
-  isExpedicao = signal(false); // 🔥 NOVO: Permissão para a expedição/balança
+  isTI = signal(false);
+  isCarregamento = signal(false);
+  isExpedicao = signal(false);
+  isComercial = signal(false);
 
   // 📝 LOG E JUSTIFICATIVA
   modalJustificativaAberto = signal(false);
@@ -68,6 +69,11 @@ pdfUrlSegura = computed(() => {
   // --- EDIÇÃO ---
   modalEdicaoAberto = signal(false);
   ocupacoesDoDia = signal<IntervaloOcupado[]>([]);
+
+  // Validação de transportadora para agendamentos sem placa
+  transpEsperada   = signal<string | null>(null);
+  transpEncontrada = signal<string | null>(null);
+  validacaoTransp  = signal<'ok' | 'divergencia' | 'buscando' | null>(null);
 
   formEdicao = signal({ 
     id: '', placa: '', data: '', hora: '', 
@@ -98,7 +104,7 @@ readonly somenteMeus = signal(false);
       this.desvincularOrdens.set(marcado);
       if (marcado) {
           // Limpa todas as 5 caixinhas de ordem
-          this.formEdicao.update(atual => ({ ...atual, pre_ordens: ['', '', '', '', ''] }));
+          this.formEdicao.update((atual: any) => ({ ...atual, pre_ordens: ['', '', '', '', ''] }));
       }
   }
 
@@ -127,18 +133,21 @@ ngOnInit() {
 
             // 1. TI e ADM (Veem TUDO: Carga + Edição)
             if (['TI', 'ADM'].includes(cargo) || depto === 'TI') {
-                console.log('✅ Acesso TI/ADM detectado!');
                 this.isTI.set(true);
-            } 
+            }
             // 2. Carregamento (Vê APENAS a coluna de Carga)
             else if (['CAR', 'CARREGAMENTO', 'PATIO', 'CONFERENTE'].includes(cargo)) {
-                console.log('📦 Acesso Carregamento detectado!');
                 this.isCarregamento.set(true);
-            } 
-            // 3. Expedição e Balança (Veem APENAS a coluna de Edição)
+            }
+            // 3. Expedição e Balança (Veem APENAS a coluna de Edição) → filtra Fardos
             else if (['EXP', 'EXPEDIÇÃO', 'BAL', 'BALANÇA'].includes(cargo)) {
-                console.log('🚛 Acesso Expedição detectado!');
                 this.isExpedicao.set(true);
+                this.tipoDerivado.set('Nao'); // Fardos
+            }
+            // 4. Comercial → filtra Derivados automaticamente
+            else if (cargo.includes('COM')) {
+                this.isComercial.set(true);
+                this.tipoDerivado.set('Sim'); // Derivados
             }
         } catch (e) {
             console.error('Erro ao ler dados do localStorage', e);
@@ -181,20 +190,33 @@ carregarDados() {
 }
 // No arquivo: monitoramento.component.ts
 
-// 1. Adicione este método novo para a PLACA
 updatePlacaEdicao(valor: string) {
-  // Remove tudo que não é letra ou número e deixa maiúsculo
   let limpa = valor.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  
-  // Limita a 7 caracteres (padrão Mercosul/Antigo sem contar hífen)
   if (limpa.length > 7) limpa = limpa.slice(0, 7);
+  if (limpa.length > 3) limpa = limpa.slice(0, 3) + '-' + limpa.slice(3);
 
-  // Adiciona o hífen visualmente após o 3º caractere
-  if (limpa.length > 3) {
-      limpa = limpa.slice(0, 3) + '-' + limpa.slice(3);
+  this.formEdicao.update((atual: any) => ({ ...atual, placa: limpa }));
+
+  // Validação de transportadora: só se o agendamento era sem placa
+  if (this.transpEsperada()) {
+    if (limpa.length === 8) {
+      this.validacaoTransp.set('buscando');
+      this.apiService.consultarPlaca(limpa.replace('-', '')).subscribe({
+        next: (res) => {
+          this.transpEncontrada.set(res.transportadora);
+          const match = res.transportadora.trim().toUpperCase() === this.transpEsperada()!.trim().toUpperCase();
+          this.validacaoTransp.set(match ? 'ok' : 'divergencia');
+        },
+        error: () => {
+          this.transpEncontrada.set(null);
+          this.validacaoTransp.set('divergencia');
+        }
+      });
+    } else {
+      this.validacaoTransp.set(null);
+      this.transpEncontrada.set(null);
+    }
   }
-
-  this.formEdicao.update(atual => ({ ...atual, placa: limpa }));
 }
 
 // 2. Substitua o método updatePreOrdemEdicao por este (validando números)
@@ -205,7 +227,7 @@ updatePreOrdemEdicao(index: number, valor: string) {
   // Trava em 6 dígitos (regra do ERP)
   if (numeros.length > 6) numeros = numeros.slice(0, 6);
 
-  this.formEdicao.update(atual => {
+  this.formEdicao.update((atual: any) => {
     const novas = [...atual.pre_ordens];
     novas[index] = numeros;
     return { ...atual, pre_ordens: novas };
@@ -216,14 +238,14 @@ updatePreOrdemEdicao(index: number, valor: string) {
 salvarEdicao() {
     const dados = this.formEdicao();
     
-    // Validação Placa
-    if (dados.placa.length < 8) {
-        alert('A placa deve estar completa (Ex: AAA-1234).');
+    // Validação Placa: permite vazio (sem placa), bloqueia parcial
+    if (dados.placa && dados.placa.length > 0 && dados.placa.length < 8) {
+        alert('A placa deve estar completa (Ex: AAA-1234) ou deixe em branco.');
         return;
     }
 
     // Validação Ordens
-    const temOrdemValida = dados.pre_ordens.some(o => o.length > 0);
+    const temOrdemValida = dados.pre_ordens.some((o: string) => o.length > 0);
     if (!temOrdemValida) {
         alert('Informe pelo menos uma Ordem de Carregamento.');
         return;
@@ -241,12 +263,12 @@ salvarEdicao() {
 }
 // Função genérica para atualizar campos simples (placa, duração, etc)
 updateEdicao(campo: string, valor: any) {
-  this.formEdicao.update(atual => ({ ...atual, [campo]: valor }));
+  this.formEdicao.update((atual: any) => ({ ...atual, [campo]: valor }));
 }
 
 // Função específica para trocar o local (limpa a hora para forçar nova escolha)
 setLocalEdicao(local: string) {
-  this.formEdicao.update(atual => ({ ...atual, local: local, hora: '' }));
+  this.formEdicao.update((atual: any) => ({ ...atual, local: local, hora: '' }));
 }
 
 
@@ -326,7 +348,7 @@ fecharImagem() {
 }
   // --- EDIÇÃO ---
   aoMudarDataEdicao(novaData: string) {
-    this.formEdicao.update(atual => ({ ...atual, data: novaData, hora: '' }));
+    this.formEdicao.update((atual: any) => ({ ...atual, data: novaData, hora: '' }));
   }
 
   statusOriginalEdicao = '';
@@ -339,10 +361,17 @@ fecharImagem() {
     const dataIso = `${ano}-${mes}-${dia}`;
     const ordensArray = [ item.pre_ordem1 || '', item.pre_ordem2 || '', item.pre_ordem3 || '', item.pre_ordem4 || '', item.pre_ordem5 || '' ];
 
-    this.formEdicao.set({ 
+    this.formEdicao.set({
         id: item.id, placa: item.placa, data: dataIso, hora: item.h_inicio,
         duracao: item.duracao || 30, local: item.local || 'Matriz', pre_ordens: ordensArray
     });
+
+    // Se o item não tem placa, ativa validação de transportadora
+    const semPlaca = !item.placa || item.placa.trim() === '';
+    this.transpEsperada.set(semPlaca ? (item.transportadora || null) : null);
+    this.transpEncontrada.set(null);
+    this.validacaoTransp.set(null);
+
     this.modalEdicaoAberto.set(true);
   }
 
@@ -386,7 +415,7 @@ carregarOcupacoes(data: string, local: string) {
     return times;
   });
 
-  selecionarHorario(time: string) { this.formEdicao.update(v => ({ ...v, hora: time })); }
+  selecionarHorario(time: string) { this.formEdicao.update((v: any) => ({ ...v, hora: time })); }
 
 
 
@@ -444,13 +473,23 @@ desmarcarAgendamento() {
   
 validarAntesDeSalvar() {
       const dados = this.formEdicao();
-      
-      // Validações Básicas (Placa e Ordem)
-      if (!dados.placa || dados.placa.length < 8) {
-          alert('A placa deve estar completa (Ex: AAA-1234).');
+
+      // Validação de transportadora (agendamentos sem placa)
+      if (this.validacaoTransp() === 'divergencia') {
+        alert('Transportadora divergente. A placa informada pertence a "' + (this.transpEncontrada() || 'transportadora não encontrada') + '".\nO agendamento foi feito para: ' + this.transpEsperada());
+        return;
+      }
+      if (this.transpEsperada() && dados.placa && this.validacaoTransp() !== 'ok') {
+        alert('Aguarde a validação da transportadora ou corrija a placa.');
+        return;
+      }
+
+      // Validações Básicas (Placa e Ordem): placa pode ser vazia, mas não parcial
+      if (dados.placa && dados.placa.length > 0 && dados.placa.length < 8) {
+          alert('A placa deve estar completa (Ex: AAA-1234) ou deixe em branco.');
           return;
       }
-      const temOrdemValida = dados.pre_ordens.some(o => o && o.trim().length > 0);
+      const temOrdemValida = dados.pre_ordens.some((o: string) => o && o.trim().length > 0);
       if (!temOrdemValida && !this.desvincularOrdens()) {
           alert('Informe pelo menos uma Ordem de Carregamento ou marque a opção "Desvincular Ordens".');
           return;

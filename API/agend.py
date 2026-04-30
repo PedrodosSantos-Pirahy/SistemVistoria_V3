@@ -120,8 +120,9 @@ def get_pendencias_db(filter_date=None):
                 CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')) as todas_ordens
             FROM "vistoria"."VAGENDAMENTO" a
             WHERE a.data >= CURRENT_DATE
+            AND TRIM(COALESCE(a.placa, '')) != ''
             AND NOT EXISTS (
-                SELECT 1 FROM "vistoria"."VRESPOSTAS" r 
+                SELECT 1 FROM "vistoria"."VRESPOSTAS" r
                 WHERE CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
                 AND r.status IN ('Concluída', 'Concluida', 'Cancelada')
             )
@@ -221,22 +222,22 @@ def log_request_info():
         return response
 
 # --- ROTAS ---
-
 @app.route('/consultar-placa/<placa>', methods=['GET'])
 def consultar_placa(placa):
     conn = None
     cur = None
     try:
-        # 🔥 ALTERAÇÃO: Conecta no DB_BUSCA
-        conn = psycopg2.connect(**DB_BUSCA)
+        # 🔥 CORREÇÃO: Alugando o carro na Hertz (Pool)
+        conn = db_pool.getconn()
         cur = conn.cursor()
 
         placa_limpa = placa.upper().replace("-", "").strip()
 
+        # Usando LEFT JOIN para não bloquear caminhões sem transportadora
         sql = """
-            SELECT y."TRP_NOME"
+            SELECT COALESCE(y."TRP_NOME", 'TRANSPORTADORA NÃO VINCULADA NO ERP')
             FROM "UTRAPLACA" x
-            INNER JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
+            LEFT JOIN "UTRAPROPR" y ON x."PLA_PROPR" = y."TRP_CODIGO"
             WHERE REGEXP_REPLACE(UPPER(x."PLA_PLACA"), '[^A-Z0-9]', '', 'g') = %s
             LIMIT 1
         """
@@ -247,20 +248,39 @@ def consultar_placa(placa):
         if resultado:
             return jsonify({"transportadora": resultado[0]}), 200
         else:
-            return jsonify({"error": "Placa não encontrada"}), 404
+            return jsonify({"error": "Placa não encontrada no ERP"}), 404
 
     except Exception as e:
         print(f"❌ Erro ao consultar placa: {e}")
         return jsonify({"error": str(e)}), 500
     finally:
-        # 3. Feche o cursor se ele foi criado
-        if cur:
-            cur.close()
-        # 4. Só devolva a conexão se você realmente conseguiu pegar ela
-        if conn:
-            db_pool.putconn(conn)
+        if cur: cur.close()
+        # 🔥 Devolvendo o carro na Hertz (Pool) corretamente!
+        if conn: db_pool.putconn(conn)
 
-# No arquivo: agend.py
+@app.route('/transportadoras', methods=['GET'])
+def listar_transportadoras():
+    busca = request.args.get('q', '').strip().upper()
+    conn = None
+    cur = None
+    try:
+        conn = db_pool.getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT "TRP_CODIGO", "TRP_NOME"
+            FROM "UTRAPROPR"
+            WHERE UPPER("TRP_NOME") LIKE %s
+            ORDER BY "TRP_NOME" ASC
+            LIMIT 20
+        """, (f'%{busca}%',))
+        rows = cur.fetchall()
+        return jsonify([{"codigo": r[0], "nome": r[1]} for r in rows])
+    except Exception as e:
+        print(f"Erro ao listar transportadoras: {e}")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur: cur.close()
+        if conn: db_pool.putconn(conn)
 
 @app.route('/criar-agendamento', methods=['POST'])
 def criar_agendamento():
@@ -310,23 +330,44 @@ def criar_agendamento():
                     is_derivado = True
                     break 
 
-        # 🔥 MUDANÇA: Adicionado 'derivado' no INSERT
+        # Verifica se o slot já está ocupado antes de inserir
+        cur.execute("""
+            SELECT COUNT(*) FROM "vistoria"."VAGENDAMENTO"
+            WHERE data = %s AND hr_inicio = %s AND local = %s
+            AND COALESCE(derivado, FALSE) = %s
+            AND NOT EXISTS (
+                SELECT 1 FROM "vistoria"."VRESPOSTAS" r
+                WHERE CAST(r.id_agend AS VARCHAR) = CAST("VAGENDAMENTO".id AS VARCHAR)
+                AND r.status IN ('Cancelada', 'Cancelado')
+            )
+        """, (dados['data_agendamento'], dados['hora_inicio'], dados.get('local', 'Matriz'), is_derivado))
+        if cur.fetchone()[0] > 0:
+            return jsonify({"error": "SLOT_OCUPADO"}), 409
+
         sql = """
-            INSERT INTO "vistoria"."VAGENDAMENTO" 
+            INSERT INTO "vistoria"."VAGENDAMENTO"
             (placa, data, hr_inicio, hr_fim, local, pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5, criado_em, derivado, criado_por)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, %s)
             RETURNING id;
         """
-
         valores = (
-            dados['placa'], dados['data_agendamento'], dados['hora_inicio'], str_hr_fim,
+            dados.get('placa', '').strip(), dados['data_agendamento'], dados['hora_inicio'], str_hr_fim,
             dados.get('local', 'Matriz'), ordens_db[0], ordens_db[1], ordens_db[2], ordens_db[3], ordens_db[4],
-            is_derivado, 
-            dados.get('criado_por', 'Sistema') # 🔥 Pega o nome de quem criou, ou salva como 'Sistema'
+            is_derivado, dados.get('criado_por', 'Sistema')
         )
 
         cur.execute(sql, valores)
         novo_id = cur.fetchone()[0]
+
+        # Se não tem placa, guarda transportadora em VTRANSTEMP para exibição no monitoramento
+        if not dados.get('placa', '').strip():
+            transportadora_val = dados.get('transportadora', '') or ''
+            if transportadora_val:
+                cur.execute("""
+                    INSERT INTO "vistoria"."VTRANSTEMP" ("ID_AGEND", "TRANSPORTADORA")
+                    VALUES (%s, %s)
+                """, (novo_id, transportadora_val))
+
         conn.commit()
 
         print(f"🎉 SUCESSO! Agendamento {novo_id} criado! (Derivado: {is_derivado})")
@@ -335,8 +376,12 @@ def criar_agendamento():
         return jsonify({"message": "Agendado com sucesso!", "id": novo_id}), 200
 
     except Exception as e:
-        print("❌ ERRO CRÍTICO:", e)
+        import traceback
+        print("ERRO CRIAR-AGENDAMENTO:", str(e))
+        traceback.print_exc()
         if conn: conn.rollback()
+        if 'uq_agend_slot' in str(e) or ('unique' in str(e).lower() and 'vagendamento' in str(e).lower()):
+            return jsonify({"error": "SLOT_OCUPADO"}), 409
         return jsonify({"error": str(e)}), 500
     finally:
         if conn: conn.close()
@@ -396,28 +441,34 @@ def get_dados_carga(placa):
             
             # 🔥 SQL ATUALIZADO: Trazendo a soma de produtos e o TIPO DE PALETE!
             sql_produtos = """
-                SELECT 
-                    z."PRD_DESC_RES", 
-                    SUM(y."PED_QUANT") as quantidade_total, 
-                    z."PRD_UNID", 
-                    -- Lógica solicitada:
-                    CASE 
-                        WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
-                        ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
-                    END AS tipo_palete_final
-                FROM "APEDIDOS" x
-                JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
-                JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
-                LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
-                LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
-                WHERE x."PED_PRE_ORDEM" IN %s 
-                GROUP BY 
-                    z."PRD_DESC_RES", 
-                    z."PRD_UNID", 
-                    -- Importante: o GROUP BY deve refletir a lógica do SELECT
-                    u."PES_TP_PALET",
-                    s."PLT_DESC_TIPO"
-                ORDER BY quantidade_total DESC
+                    SELECT 
+                            z."PRD_DESC_RES", 
+                            SUM(y."PED_QUANT") as quantidade_total, 
+                            z."PRD_UNID",
+                            CASE 
+                                -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                -- Caso contrário, retorna o valor padrão
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END AS tipo_palete_final
+                        FROM "APEDIDOS" x
+                        JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                        JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                        LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
+                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
+                        WHERE x."PED_PRE_ORDEM" IN %s
+                        -- O GROUP BY leva o CASE inteiro!
+                        GROUP BY 
+                            z."PRD_DESC_RES", 
+                            z."PRD_UNID", 
+                            CASE 
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END
+                        ORDER BY quantidade_total DESC;
             """
             cur.execute(sql_produtos, (pre_ordens_tuple,))
             rows_prod = cur.fetchall()
@@ -878,9 +929,15 @@ def gerenciar_agendamento():
                 WHERE id = %s
              """
              cur.execute(sql_update, (
-                nova_placa, nova_data, nova_hora, hora_fim, 
+                nova_placa, nova_data, nova_hora, hora_fim,
                 novo_local, *ordens_db, id_agend
              ))
+
+             # Se placa foi informada, limpa o registro temporário de transportadora
+             if nova_placa and nova_placa.strip():
+                 cur.execute("""
+                     DELETE FROM "vistoria"."VTRANSTEMP" WHERE "ID_AGEND" = %s
+                 """, (id_agend,))
 
         conn.commit()
         return jsonify({"message": "Sucesso"}), 200
@@ -1094,27 +1151,34 @@ def exportar_relatorio():
                     
                     # --- BUSCA PRODUTOS COM SOMA DE QUANTIDADES E TIPO DE PALETE ---
                     sql_produtos_pdf = """
-                        SELECT 
-                            CAST(x."PED_PRE_ORDEM" AS VARCHAR),
+                    SELECT 
                             z."PRD_DESC_RES", 
                             SUM(y."PED_QUANT") as quantidade_total, 
-                            z."PRD_UNID", 
+                            z."PRD_UNID",
                             CASE 
+                                -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
                                 WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                -- Caso contrário, retorna o valor padrão
                                 ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
                             END AS tipo_palete_final
                         FROM "APEDIDOS" x
                         JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
                         JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
                         LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
-                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO"
-                        WHERE x."PED_PRE_ORDEM" IN %s 
+                        LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
+                        WHERE x."PED_PRE_ORDEM" IN %s
+                        -- O GROUP BY leva o CASE inteiro!
                         GROUP BY 
-                            x."PED_PRE_ORDEM",
                             z."PRD_DESC_RES", 
                             z."PRD_UNID", 
-                            u."PES_TP_PALET",
-                            s."PLT_DESC_TIPO"
+                            CASE 
+                                WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                                WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
+                                ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
+                            END
+                        ORDER BY quantidade_total DESC;
                     """
                     cur_erp.execute(sql_produtos_pdf, (tuple(todas_pos),))
                     

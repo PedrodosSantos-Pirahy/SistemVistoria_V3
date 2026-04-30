@@ -1,4 +1,4 @@
-import { Component, ChangeDetectionStrategy, signal, OnInit, computed } from '@angular/core';
+import { Component, ChangeDetectionStrategy, signal, OnInit, OnDestroy, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormComponent } from './components/form/form.component';
 import { PainelComponent } from './components/painel/painel.component';
@@ -7,6 +7,7 @@ import { AgendamentoComponent } from './components/agend/agendamento.component';
 import { MonitoramentoComponent } from './components/monitoramento/monitoramento.component';
 import { LoginComponent } from './components/login/login.component';
 import { CarregamentoComponent } from './components/carregamento/carregamento.component';
+import { ApiService } from './services/app.service';
 
 @Component({
   selector: 'app-root',
@@ -24,9 +25,15 @@ import { CarregamentoComponent } from './components/carregamento/carregamento.co
   templateUrl: './app.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
+
+  private _alertInterval: any = null;
+
+  constructor(private apiService: ApiService) {}
 
   isLogado = signal(false);
+  temAgendSemPlaca = signal(false);
+  qtdAgendSemPlaca = signal(0);
   
   // Adicionamos 'carregamento' na lista de telas permitidas
   readonly view = signal<'list' | 'form' | 'historico' | 'agendamento' | 'monitoramento' | 'carregamento' | null>(null);
@@ -38,18 +45,20 @@ export class AppComponent implements OnInit {
   // --- PERMISSÕES ---
   isAdmin = computed(() => ['ADM', 'TI'].includes(this.usuarioCargo()));
   
-  isExpedicao = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
+  isComercial   = computed(() => this.usuarioCargo().toUpperCase().includes('COM'));
+  isExpedicao   = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
   isVistoriador = computed(() => this.usuarioCargo() === 'VIS' || this.isAdmin());
   isCarregamento = computed(() => this.usuarioCargo() === 'CAR' || this.isAdmin());
   podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento());
-  
-  // ✨ NOVO: Permissão para Balança (BAL)
+
   isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
 
-  // 🔥 ATUALIZADO: Adicionado isBalanca() na regra de quem vê o monitoramento
-  podeVerMonitoramento = computed(() => 
-    this.isExpedicao() || this.isCarregamento() || this.isBalanca()
+  podeVerMonitoramento = computed(() =>
+    this.isExpedicao() || this.isCarregamento() || this.isBalanca() || this.isComercial()
   );
+
+  // Comercial pode agendar mas não vê Painel/Monitoramento/Carregamento
+  podeAgendar = computed(() => this.isExpedicao() || this.isComercial());
 
   ngOnInit() {
     const dados = localStorage.getItem('usuario_logado');
@@ -60,19 +69,41 @@ export class AppComponent implements OnInit {
       this.usuarioCargo.set(user.cargo);
 
       const cargo = this.usuarioCargo();
-      
-      // 🔥 ATUALIZADO: Regras de redirecionamento no Login
+
       if (cargo === 'CAR') {
-        this.view.set('carregamento'); // Carregamento cai DIRETRO no Dashboard
-      } else if (cargo === 'EXP' || cargo === 'BAL') {
-        this.view.set('monitoramento'); // Expedição e Balança caem no Monitoramento
+        this.view.set('carregamento');
+      } else if (cargo === 'EXP' || cargo === 'COM') {
+        this.view.set('monitoramento');
       } else {
-        this.view.set('list'); // Vistoriadores e ADMs começam no Painel
+        this.view.set('list');
+      }
+
+      // Alerta de agendamentos sem placa — quem pode ver monitoramento (exceto Comercial)
+      if (this.podeVerMonitoramento() && !this.isComercial()) {
+        this.verificarAgendSemPlaca();
+        this._alertInterval = setInterval(() => this.verificarAgendSemPlaca(), 60000);
       }
 
     } else {
       this.isLogado.set(false);
     }
+  }
+  
+
+  ngOnDestroy() {
+    if (this._alertInterval) clearInterval(this._alertInterval);
+  }
+
+  verificarAgendSemPlaca() {
+    this.apiService.getMonitoramento(1, 100, '', 'Qualquer', 'Todas', '', 'Todas').subscribe({
+      next: (res: Record<string, any>) => {
+        const dados: any[] = res['data'] ?? res['dados'] ?? res['fila_caminhoes'] ?? [];
+        const semPlaca = dados.filter((item: any) => !item.placa || item.placa.trim() === '');
+        this.qtdAgendSemPlaca.set(semPlaca.length);
+        this.temAgendSemPlaca.set(semPlaca.length > 0);
+      },
+      error: () => {}
+    });
   }
 
   logout() {
