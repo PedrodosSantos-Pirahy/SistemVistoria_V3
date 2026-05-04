@@ -1,11 +1,14 @@
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify, make_response, send_file
 from flask_cors import CORS
 import psycopg2
 from datetime import datetime, timedelta
 import traceback
 import sys
 import os
+import threading
+import uuid
+import tempfile
 import base64
 import io
 import bcrypt
@@ -17,6 +20,9 @@ from psycopg2 import pool
 # pasta_atual = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)#, template_folder=pasta_atual)
+
+# Controle de jobs de exportação em background
+_jobs = {}  # { job_id: { status, arquivo, nome_arquivo, erro } }
 
 # Configuração CORS
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -952,16 +958,58 @@ def gerenciar_agendamento():
 
 import csv # Adicione isto lá no topo do ficheiro se não tiver, ou o Python já carrega nativamente!
 
-# --- NOVA ROTA: EXPORTAR RELATÓRIOS (EXCEL E PDF) ---
+# --- ROTA: INICIAR EXPORTAÇÃO EM BACKGROUND ---
 @app.route('/exportar-relatorio', methods=['GET'])
 def exportar_relatorio():
-    data_inicio = request.args.get('inicio', '')
-    data_fim = request.args.get('fim', '')
-    status = request.args.get('status', 'Todas')
-    local = request.args.get('local', 'Qualquer')
-    derivado = request.args.get('derivado', 'Todas')
-    transportadora = request.args.get('transportadora', '').strip().upper()
-    formato = request.args.get('formato', 'excel')
+    params = {
+        'inicio':         request.args.get('inicio', ''),
+        'fim':            request.args.get('fim', ''),
+        'status':         request.args.get('status', 'Todas'),
+        'local':          request.args.get('local', 'Qualquer'),
+        'derivado':       request.args.get('derivado', 'Todas'),
+        'transportadora': request.args.get('transportadora', '').strip().upper(),
+        'formato':        request.args.get('formato', 'excel'),
+    }
+    job_id = str(uuid.uuid4())
+    _jobs[job_id] = {'status': 'processando', 'arquivo': None, 'nome': None, 'erro': None}
+    threading.Thread(target=_gerar_relatorio, args=(job_id, params), daemon=True).start()
+    return jsonify({'job_id': job_id})
+
+
+@app.route('/status-relatorio/<job_id>', methods=['GET'])
+def status_relatorio(job_id):
+    job = _jobs.get(job_id)
+    if not job:
+        return jsonify({'status': 'nao_encontrado'}), 404
+    return jsonify({'status': job['status'], 'erro': job.get('erro')})
+
+
+@app.route('/download-relatorio/<job_id>', methods=['GET'])
+def download_relatorio(job_id):
+    job = _jobs.get(job_id)
+    if not job or job['status'] != 'pronto' or not job['arquivo']:
+        return jsonify({'error': 'Arquivo não disponível'}), 404
+    caminho = job['arquivo']
+    nome = job['nome']
+    mime = 'application/pdf' if nome.endswith('.pdf') else 'text/csv'
+    resp = send_file(caminho, mimetype=mime, as_attachment=True, download_name=nome)
+    # limpa o arquivo após o download
+    try:
+        os.remove(caminho)
+    except Exception:
+        pass
+    del _jobs[job_id]
+    return resp
+
+
+def _gerar_relatorio(job_id, p):
+    data_inicio   = p['inicio']
+    data_fim      = p['fim']
+    status        = p['status']
+    local         = p['local']
+    derivado      = p['derivado']
+    transportadora = p['transportadora']
+    formato       = p['formato']
 
     # Tradução bonita do Filtro "Derivado" para o cabeçalho do PDF
     texto_tipo_filtro = "Geral (Ambas)"
@@ -1162,10 +1210,11 @@ def exportar_relatorio():
                 linha_limpa = [str(item).replace('\n', ' ').replace('\r', '') if item is not None else '-' for item in linha]
                 writer.writerow(linha_limpa)
 
-            response = make_response(output.getvalue().encode('utf-8-sig'))
-            response.headers["Content-Disposition"] = f"attachment; filename=Relatorio_Patio_{data_inicio}_a_{data_fim}.csv"
-            response.headers["Content-type"] = "text/csv"
-            return response
+            nome_arquivo = f"Relatorio_Patio_{data_inicio}_a_{data_fim}.csv"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv', prefix='rel_')
+            tmp.write(output.getvalue().encode('utf-8-sig'))
+            tmp.close()
+            _jobs[job_id] = {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None}
 
         # ==============================================================
         # 🔴 OPÇÃO 2: PDF (Visual Executivo com Quantidades e Paletes)
@@ -1382,11 +1431,16 @@ def exportar_relatorio():
             </body>
             </html>
             """
-            return make_response(html)
+            nome_arquivo = f"Relatorio_Patio_{data_inicio}_a_{data_fim}.pdf"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', prefix='rel_')
+            tmp.write(html.encode('utf-8'))
+            tmp.close()
+            _jobs[job_id] = {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None}
 
     except Exception as e:
+        traceback.print_exc()
         print(f"❌ Erro ao exportar relatório: {e}")
-        return jsonify({"error": str(e)}), 500
+        _jobs[job_id] = {'status': 'erro', 'arquivo': None, 'nome': None, 'erro': str(e)}
     finally:
         if conn: conn.close()
 

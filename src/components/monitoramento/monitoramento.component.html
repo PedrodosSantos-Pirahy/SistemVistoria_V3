@@ -380,16 +380,24 @@
         </div>
       </div>
 
-      <div class="flex gap-2 pt-2">
-        <button (click)="modalRelatorioAberto.set(false)"
-                class="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-black text-gray-600 hover:bg-gray-50 transition-all">
-          Cancelar
-        </button>
-        <button (click)="exportarRelatorio()" [disabled]="exportando()"
-                class="flex-1 py-2 rounded-xl bg-[#6b2b1f] text-white text-sm font-black uppercase hover:bg-[#5a231a] transition-all disabled:opacity-50">
-          {{ exportando() ? 'Gerando...' : 'Exportar' }}
-        </button>
-      </div>
+      @if (exportando()) {
+        <div class="flex flex-col items-center gap-3 py-4">
+          <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-[#6b2b1f]"></div>
+          <p class="text-sm font-black text-gray-600 uppercase tracking-wide">Gerando relatório...</p>
+          <p class="text-[10px] text-gray-400">Isso pode levar alguns segundos. Aguarde.</p>
+        </div>
+      } @else {
+        <div class="flex gap-2 pt-2">
+          <button (click)="modalRelatorioAberto.set(false)"
+                  class="flex-1 py-2 rounded-xl border border-gray-200 text-sm font-black text-gray-600 hover:bg-gray-50 transition-all">
+            Cancelar
+          </button>
+          <button (click)="exportarRelatorio()"
+                  class="flex-1 py-2 rounded-xl bg-[#6b2b1f] text-white text-sm font-black uppercase hover:bg-[#5a231a] transition-all">
+            Exportar
+          </button>
+        </div>
+      }
     </div>
   </div>
 }

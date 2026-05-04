@@ -584,12 +584,42 @@ validarAntesDeSalvar() {
     this.relFiltros.update((f: any) => ({ ...f, [campo]: valor }));
   }
 
+  private _pollInterval: any = null;
+
   exportarRelatorio() {
     const f = this.relFiltros();
     if (!f.inicio || !f.fim) { alert('Informe as datas de início e fim.'); return; }
     this.exportando.set(true);
-    const url = this.apiService.exportarRelatorio(f);
-    window.open(url, '_blank');
-    setTimeout(() => this.exportando.set(false), 2000);
+
+    this.apiService.iniciarExportacao(f).subscribe({
+      next: (res) => {
+        const jobId = res.job_id;
+        this._pollInterval = setInterval(() => {
+          this.apiService.statusRelatorio(jobId).subscribe({
+            next: (job) => {
+              if (job.status === 'pronto') {
+                clearInterval(this._pollInterval);
+                this.exportando.set(false);
+                this.modalRelatorioAberto.set(false);
+                window.open(this.apiService.downloadRelatorioUrl(jobId), '_blank');
+              } else if (job.status === 'erro') {
+                clearInterval(this._pollInterval);
+                this.exportando.set(false);
+                alert('Erro ao gerar relatório: ' + (job.erro || 'Erro desconhecido'));
+              }
+            },
+            error: () => {
+              clearInterval(this._pollInterval);
+              this.exportando.set(false);
+              alert('Erro ao verificar status do relatório.');
+            }
+          });
+        }, 3000);
+      },
+      error: () => {
+        this.exportando.set(false);
+        alert('Erro ao iniciar exportação.');
+      }
+    });
   }
 }

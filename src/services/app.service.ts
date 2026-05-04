@@ -119,10 +119,10 @@ getDashboardCarga(data: string = '', local: string = 'Qualquer', derivado: strin
     return this.http.get<any>(`${this.URL_HISTORICO}/dashboard-carga`, { params });
   }
 
-  exportarRelatorio(params: {
+  iniciarExportacao(params: {
     inicio: string; fim: string; status: string;
     local: string; derivado: string; transportadora: string; formato: string;
-  }): string {
+  }): Observable<{ job_id: string }> {
     const p = new HttpParams()
       .set('inicio', params.inicio)
       .set('fim', params.fim)
@@ -131,7 +131,15 @@ getDashboardCarga(data: string = '', local: string = 'Qualquer', derivado: strin
       .set('derivado', params.derivado)
       .set('transportadora', params.transportadora)
       .set('formato', params.formato);
-    return `${this.URL_PRINCIPAL}/exportar-relatorio?${p.toString()}`;
+    return this.http.get<{ job_id: string }>(`${this.URL_PRINCIPAL}/exportar-relatorio`, { params: p });
+  }
+
+  statusRelatorio(jobId: string): Observable<{ status: string; erro?: string }> {
+    return this.http.get<{ status: string; erro?: string }>(`${this.URL_PRINCIPAL}/status-relatorio/${jobId}`);
+  }
+
+  downloadRelatorioUrl(jobId: string): string {
+    return `${this.URL_PRINCIPAL}/download-relatorio/${jobId}`;
   }
 
   // Helpers para links (HTML)
