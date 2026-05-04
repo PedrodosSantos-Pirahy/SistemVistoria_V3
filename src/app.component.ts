@@ -49,7 +49,8 @@ export class AppComponent implements OnInit, OnDestroy {
   isExpedicao   = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
   isVistoriador = computed(() => this.usuarioCargo() === 'VIS' || this.isAdmin());
   isCarregamento = computed(() => this.usuarioCargo() === 'CAR' || this.isAdmin());
-  podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento());
+  isDer = computed(() => this.usuarioCargo() === 'DER');
+  podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento() || this.isDer());
 
   isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
 
@@ -70,7 +71,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
       const cargo = this.usuarioCargo();
 
-      if (cargo === 'CAR') {
+      if (cargo === 'CAR' || cargo === 'DER') {
         this.view.set('carregamento');
       } else if (cargo === 'EXP' || cargo === 'COM') {
         this.view.set('monitoramento');
@@ -126,8 +127,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedInspection.set(null);
     if (this.isVistoriador()) {
       this.view.set('list');
-    } else if (this.isCarregamento()) {
-      this.view.set('carregamento'); // 🔥 Volta para o painel de carga
+    } else if (this.isCarregamento() || this.isDer()) {
+      this.view.set('carregamento');
     } else {
       this.view.set('monitoramento'); 
     }
