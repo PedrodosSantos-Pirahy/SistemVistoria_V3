@@ -986,14 +986,24 @@ def status_relatorio(job_id):
 
 @app.route('/download-relatorio/<job_id>', methods=['GET'])
 def download_relatorio(job_id):
+    print(f"📥 [DOWNLOAD] job_id={job_id} | jobs disponíveis: {list(_jobs.keys())}")
     job = _jobs.get(job_id)
-    if not job or job['status'] != 'pronto' or not job['arquivo']:
-        return jsonify({'error': 'Arquivo não disponível'}), 404
+    if not job:
+        print(f"❌ [DOWNLOAD] job_id={job_id} NÃO encontrado em _jobs")
+        return jsonify({'error': 'Job não encontrado'}), 404
+    print(f"📋 [DOWNLOAD] status={job['status']} | arquivo={job.get('arquivo')} | nome={job.get('nome')}")
+    if job['status'] != 'pronto' or not job['arquivo']:
+        return jsonify({'error': f"Arquivo não disponível (status={job['status']})"}), 404
     caminho = job['arquivo']
     nome = job['nome']
     try:
+        import os.path
+        if not os.path.exists(caminho):
+            print(f"❌ [DOWNLOAD] Arquivo não existe no disco: {caminho}")
+            return jsonify({'error': f'Arquivo não existe: {caminho}'}), 500
         with open(caminho, 'rb') as f:
             dados = f.read()
+        print(f"✅ [DOWNLOAD] Arquivo lido: {len(dados)} bytes | nome={nome}")
         if nome.endswith('.html'):
             resp = make_response(dados)
             resp.headers['Content-Type'] = 'text/html; charset=utf-8'
@@ -1008,6 +1018,8 @@ def download_relatorio(job_id):
         del _jobs[job_id]
         return resp
     except Exception as e:
+        traceback.print_exc()
+        print(f"❌ [DOWNLOAD] Exceção: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -1019,6 +1031,7 @@ def _gerar_relatorio(job_id, p):
     derivado      = p['derivado']
     transportadora = p['transportadora']
     formato       = p['formato']
+    print(f"🔄 [RELATORIO] Iniciando geração | job_id={job_id} | formato={formato} | {data_inicio} → {data_fim} | local={local} | status={status}")
 
     # Tradução bonita do Filtro "Derivado" para o cabeçalho do PDF
     texto_tipo_filtro = "Geral (Ambas)"
