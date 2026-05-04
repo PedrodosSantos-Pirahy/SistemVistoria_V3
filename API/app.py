@@ -1,5 +1,5 @@
 from dotenv import load_dotenv
-from flask import Flask, request, jsonify, make_response, send_file
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 import psycopg2
 from datetime import datetime, timedelta
@@ -991,15 +991,24 @@ def download_relatorio(job_id):
         return jsonify({'error': 'Arquivo não disponível'}), 404
     caminho = job['arquivo']
     nome = job['nome']
-    mime = 'application/pdf' if nome.endswith('.pdf') else 'text/csv'
-    resp = send_file(caminho, mimetype=mime, as_attachment=True, download_name=nome)
-    # limpa o arquivo após o download
     try:
-        os.remove(caminho)
-    except Exception:
-        pass
-    del _jobs[job_id]
-    return resp
+        with open(caminho, 'rb') as f:
+            dados = f.read()
+        if nome.endswith('.html'):
+            resp = make_response(dados)
+            resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+        else:
+            resp = make_response(dados)
+            resp.headers['Content-Type'] = 'text/csv; charset=utf-8-sig'
+            resp.headers['Content-Disposition'] = f'attachment; filename="{nome}"'
+        try:
+            os.remove(caminho)
+        except Exception:
+            pass
+        del _jobs[job_id]
+        return resp
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 def _gerar_relatorio(job_id, p):
@@ -1431,8 +1440,8 @@ def _gerar_relatorio(job_id, p):
             </body>
             </html>
             """
-            nome_arquivo = f"Relatorio_Patio_{data_inicio}_a_{data_fim}.pdf"
-            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf', prefix='rel_')
+            nome_arquivo = f"Relatorio_Patio_{data_inicio}_a_{data_fim}.html"
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', prefix='rel_')
             tmp.write(html.encode('utf-8'))
             tmp.close()
             _jobs[job_id] = {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None}
