@@ -1024,7 +1024,7 @@ def exportar_relatorio():
                 COALESCE(a.status_patio, 'PENDENTE'),
                 COALESCE(a.criado_por, 'Sistema'),
                 
-                CONCAT_WS(', ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')),
+                CONCAT_WS(' - ', NULLIF(a.pre_ordem1,''), NULLIF(a.pre_ordem2,''), NULLIF(a.pre_ordem3,''), NULLIF(a.pre_ordem4,''), NULLIF(a.pre_ordem5,'')),
                 
                 COALESCE(r.transportadora, 
                     (SELECT y2."TRP_NOME" FROM "UTRAPLACA" x2 
@@ -1089,28 +1089,79 @@ def exportar_relatorio():
         rows = cur.fetchall()
 
         # ==============================================================
-        # 🟢 OPÇÃO 1: EXCEL (Com todas as 35 colunas detalhadas)
+        # 🟢 OPÇÃO 1: EXCEL (Com todas as colunas + produtos do ERP)
         # ==============================================================
         if formato == 'excel':
+            # Buscar produtos do ERP para todas as pré-ordens do resultado
+            todas_pos_excel = set()
+            for row in rows:
+                if row[8]:
+                    for p in str(row[8]).replace(' - ', ',').replace('/', ',').split(','):
+                        if p.strip().isdigit():
+                            todas_pos_excel.add(p.strip())
+
+            # Mapa: pre_ordem -> lista de strings simples de produto
+            produtos_erp_excel = {}
+            if todas_pos_excel:
+                try:
+                    cur_erp2 = conn.cursor()
+                    cur_erp2.execute("""
+                        SELECT
+                            CAST(x."PED_PRE_ORDEM" AS VARCHAR),
+                            z."PRD_DESC_RES",
+                            SUM(y."PED_QUANT"),
+                            z."PRD_UNID"
+                        FROM "APEDIDOS" x
+                        JOIN "APED_ITEM" y ON y."PED_EMP_GRU_P" = x."PED_EMP_GRU" AND y."PED_NUMERO" = x."PED_NUMERO"
+                        JOIN "UPRODUTO" z ON z."PRD_CODIGO" = y."PED_PRODUTO"
+                        WHERE x."PED_PRE_ORDEM" IN %s
+                        GROUP BY x."PED_PRE_ORDEM", z."PRD_DESC_RES", z."PRD_UNID"
+                        ORDER BY SUM(y."PED_QUANT") DESC
+                    """, (tuple(todas_pos_excel),))
+                    for po, nome, qtd, unid in cur_erp2.fetchall():
+                        po_str = str(po).strip()
+                        qtd_num = float(qtd) if qtd else 0
+                        qtd_fmt = str(int(qtd_num)) if qtd_num % 1 == 0 else f"{qtd_num:.2f}"
+                        nome_limpo = nome.strip().replace('\n', ' ').replace('\r', '') if nome else ''
+                        linha_prod = f"{nome_limpo} {qtd_fmt} {str(unid).strip()}" if nome_limpo else ''
+                        if po_str not in produtos_erp_excel:
+                            produtos_erp_excel[po_str] = []
+                        if linha_prod:
+                            produtos_erp_excel[po_str].append(linha_prod)
+                except Exception as e:
+                    import traceback
+                    print("⚠️ Erro ERP Excel:", e)
+                    traceback.print_exc()
+
             output = io.StringIO()
             writer = csv.writer(output, delimiter=';', dialect='excel')
-            
-            # Cabeçalho Gigante Atualizado
+
             cabecalho = [
                 'Placa', 'Data Agendada', 'Hora Início Agend.', 'Hora Fim Agend.', 'Unidade', 'Tipo Carga',
                 'Status no Pátio', 'Criado Por', 'Pré-Ordens', 'Transportadora', 'Motorista', 'Vistoriador',
-                'Chegada Motorista' ,'Início Vistoria', 'Fim Vistoria', 'Início Carregamento (ERP)', 'Fim Carregamento (ERP)',
-                'Caminhão Liberado?', 'Tipo Veículo', 'Produto/Carga', 'Observações da Vistoria',
+                'Chegada Motorista', 'Início Vistoria', 'Fim Vistoria', 'Início Carregamento (ERP)', 'Fim Carregamento (ERP)',
+                'Caminhão Liberado?', 'Tipo Veículo', 'Produtos (ERP)', 'Observações da Vistoria',
                 'Limpeza/Insetos', 'Danos/Frestas', 'Umidade/Mofo', 'Resíduos', 'Odores', 'Bocas Graneleiras',
                 'Lonas/Forração', 'Chapas MDF', 'Lonas Íntegras', 'Cantoneiras/Cintas', 'Tampas/Vedação',
                 'Altura Porta 2,30m', 'Abertura Total', 'Assoalho Liso', 'Peso/Tara Container'
             ]
             writer.writerow(cabecalho)
-            
+
             for row in rows:
-                linha_limpa = [str(item).replace('\n', ' ').replace('\r', '') if item is not None else '-' for item in row]
+                # Monta string de produtos ERP para esta linha (um por linha na célula)
+                pre_ordens_str = str(row[8]) if row[8] else ''
+                todos_prods = []
+                for p in pre_ordens_str.replace(' - ', ',').replace('/', ',').split(','):
+                    p_clean = p.strip()
+                    if p_clean in produtos_erp_excel:
+                        todos_prods.extend(produtos_erp_excel[p_clean])
+                produto_erp_str = ' | '.join(todos_prods) if todos_prods else '-'
+
+                linha = list(row)
+                linha[19] = produto_erp_str  # col 19 = r.produto, substituido por ERP
+                linha_limpa = [str(item).replace('\n', ' ').replace('\r', '') if item is not None else '-' for item in linha]
                 writer.writerow(linha_limpa)
-                
+
             response = make_response(output.getvalue().encode('utf-8-sig'))
             response.headers["Content-Disposition"] = f"attachment; filename=Relatorio_Patio_{data_inicio}_a_{data_fim}.csv"
             response.headers["Content-type"] = "text/csv"
@@ -1151,16 +1202,14 @@ def exportar_relatorio():
                     
                     # --- BUSCA PRODUTOS COM SOMA DE QUANTIDADES E TIPO DE PALETE ---
                     sql_produtos_pdf = """
-                    SELECT 
-                            z."PRD_DESC_RES", 
-                            SUM(y."PED_QUANT") as quantidade_total, 
+                    SELECT
+                            CAST(x."PED_PRE_ORDEM" AS VARCHAR),
+                            z."PRD_DESC_RES",
+                            SUM(y."PED_QUANT") as quantidade_total,
                             z."PRD_UNID",
-                            CASE 
-                                -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
+                            CASE
                                 WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
-                                -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
                                 WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
-                                -- Caso contrário, retorna o valor padrão
                                 ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
                             END AS tipo_palete_final
                         FROM "APEDIDOS" x
@@ -1169,11 +1218,11 @@ def exportar_relatorio():
                         LEFT JOIN "APALETS" s ON y."PED_PALETS" = s."PLT_CODIGO"
                         LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
                         WHERE x."PED_PRE_ORDEM" IN %s
-                        -- O GROUP BY leva o CASE inteiro!
-                        GROUP BY 
-                            z."PRD_DESC_RES", 
-                            z."PRD_UNID", 
-                            CASE 
+                        GROUP BY
+                            x."PED_PRE_ORDEM",
+                            z."PRD_DESC_RES",
+                            z."PRD_UNID",
+                            CASE
                                 WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
                                 WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
                                 ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
@@ -1181,7 +1230,7 @@ def exportar_relatorio():
                         ORDER BY quantidade_total DESC;
                     """
                     cur_erp.execute(sql_produtos_pdf, (tuple(todas_pos),))
-                    
+
                     for po, prd_nome, qtd, unid, palete in cur_erp.fetchall():
                         po_str = str(po).strip()
                         if po_str in info_erp and prd_nome:

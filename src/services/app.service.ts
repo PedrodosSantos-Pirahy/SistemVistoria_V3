@@ -119,6 +119,21 @@ getDashboardCarga(data: string = '', local: string = 'Qualquer', derivado: strin
     return this.http.get<any>(`${this.URL_HISTORICO}/dashboard-carga`, { params });
   }
 
+  exportarRelatorio(params: {
+    inicio: string; fim: string; status: string;
+    local: string; derivado: string; transportadora: string; formato: string;
+  }): string {
+    const p = new HttpParams()
+      .set('inicio', params.inicio)
+      .set('fim', params.fim)
+      .set('status', params.status)
+      .set('local', params.local)
+      .set('derivado', params.derivado)
+      .set('transportadora', params.transportadora)
+      .set('formato', params.formato);
+    return `${this.URL_PRINCIPAL}/exportar-relatorio?${p.toString()}`;
+  }
+
   // Helpers para links (HTML)
   getPdfUrl(id: string): string { return `${this.URL_HISTORICO}/pdf/${id}`; }
   getFotoUrl(id: string, tipo: string): string { return `${this.URL_HISTORICO}/foto/${id}/${tipo}`; }

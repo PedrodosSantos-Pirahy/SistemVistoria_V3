@@ -55,7 +55,7 @@ export class AppComponent implements OnInit, OnDestroy {
   isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
 
   podeVerMonitoramento = computed(() =>
-    this.isExpedicao() || this.isCarregamento() || this.isBalanca() || this.isComercial()
+    this.isExpedicao() || this.isBalanca() || this.isComercial()
   );
 
   // Comercial pode agendar mas não vê Painel/Monitoramento/Carregamento

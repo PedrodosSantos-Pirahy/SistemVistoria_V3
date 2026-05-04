@@ -559,7 +559,37 @@ validarAntesDeSalvar() {
 
   setDerivado(valor: 'Todas' | 'Sim' | 'Nao') {
       this.tipoDerivado.set(valor);
-      this.paginaAtual.set(1); // Sempre volta pra página 1 ao filtrar
+      this.paginaAtual.set(1);
       this.carregarDados();
+  }
+
+  // --- RELATÓRIO ---
+  modalRelatorioAberto = signal(false);
+  exportando = signal(false);
+  relFiltros = signal({
+    inicio: this.getDataHoje(),
+    fim: this.getDataHoje(),
+    status: 'Todas',
+    local: 'Qualquer',
+    derivado: 'Todas',
+    transportadora: '',
+    formato: 'excel'
+  });
+
+  getDataHoje(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  setRelFiltro(campo: string, valor: string) {
+    this.relFiltros.update((f: any) => ({ ...f, [campo]: valor }));
+  }
+
+  exportarRelatorio() {
+    const f = this.relFiltros();
+    if (!f.inicio || !f.fim) { alert('Informe as datas de início e fim.'); return; }
+    this.exportando.set(true);
+    const url = this.apiService.exportarRelatorio(f);
+    window.open(url, '_blank');
+    setTimeout(() => this.exportando.set(false), 2000);
   }
 }
