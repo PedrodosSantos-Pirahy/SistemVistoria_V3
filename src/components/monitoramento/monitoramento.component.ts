@@ -601,7 +601,19 @@ validarAntesDeSalvar() {
                 clearInterval(this._pollInterval);
                 this.exportando.set(false);
                 this.modalRelatorioAberto.set(false);
-                window.open(this.apiService.downloadRelatorioUrl(jobId), '_blank');
+                const url = this.apiService.downloadRelatorioUrl(jobId);
+                fetch(url).then(r => r.blob()).then(blob => {
+                  const ext = this.relFiltros().formato === 'pdf' ? 'html' : 'csv';
+                  const nomeArq = `Relatorio_Patio.${ext}`;
+                  const blobUrl = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = blobUrl;
+                  a.download = nomeArq;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(blobUrl);
+                }).catch(() => alert('Erro ao baixar o arquivo.'));
               } else if (job.status === 'erro') {
                 clearInterval(this._pollInterval);
                 this.exportando.set(false);
