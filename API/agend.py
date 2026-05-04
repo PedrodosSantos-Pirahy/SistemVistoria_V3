@@ -1176,7 +1176,7 @@ def exportar_relatorio():
             todas_pos = set()
             for row in rows:
                 if row[8]: 
-                    for p in str(row[8]).replace('/', ',').split(','):
+                    for p in str(row[8]).replace(' - ', ',').replace('/', ',').split(','):
                         if p.strip().isdigit():
                             todas_pos.add(p.strip())
             
@@ -1341,16 +1341,16 @@ def exportar_relatorio():
                 peds, embs, prods = set(), set(), set()
                 
                 if pre_ordens:
-                    for p in pre_ordens.replace('/', ',').split(','):
+                    for p in pre_ordens.replace(' - ', ',').replace('/', ',').split(','):
                         p_clean = p.strip()
                         if p_clean in info_erp:
                             peds.update(info_erp[p_clean]['ped'])
                             embs.update(info_erp[p_clean]['emb'])
                             prods.update(info_erp[p_clean]['produtos'])
-                
+
                 ped_str = "<br>".join(peds) if peds else "-"
                 emb_str = "<br>".join(embs) if embs else "-"
-                po_str = "<br>".join([p.strip() for p in pre_ordens.replace('/', ',').split(',')]) if pre_ordens else "-"
+                po_str = "<br>".join([p.strip() for p in pre_ordens.replace(' - ', ',').replace('/', ',').split(',')]) if pre_ordens else "-"
                 
                 if prods:
                     html_produtos = "<div class='produtos-lista'>" + "".join([f"<div>• {prd}</div>" for prd in prods]) + "</div>"
