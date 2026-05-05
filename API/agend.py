@@ -22,7 +22,30 @@ from psycopg2 import pool
 app = Flask(__name__)#, template_folder=pasta_atual)
 
 # Controle de jobs de exportação em background
-_jobs = {}  # { job_id: { status, arquivo, nome_arquivo, erro } }
+def _job_path(job_id):
+    return f'/tmp/rel_job_{job_id}.json'
+
+def _job_set(job_id, data):
+    import json as _json
+    with open(_job_path(job_id), 'w') as f:
+        _json.dump(data, f)
+
+def _job_get(job_id):
+    import json as _json
+    p = _job_path(job_id)
+    if not os.path.exists(p):
+        return None
+    try:
+        with open(p) as f:
+            return _json.load(f)
+    except Exception:
+        return None
+
+def _job_del(job_id):
+    try:
+        os.remove(_job_path(job_id))
+    except Exception:
+        pass
 
 # Configuração CORS
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
@@ -971,14 +994,14 @@ def exportar_relatorio():
         'formato':        request.args.get('formato', 'excel'),
     }
     job_id = str(uuid.uuid4())
-    _jobs[job_id] = {'status': 'processando', 'arquivo': None, 'nome': None, 'erro': None}
+    _job_set(job_id, {'status': 'processando', 'arquivo': None, 'nome': None, 'erro': None})
     threading.Thread(target=_gerar_relatorio, args=(job_id, params), daemon=True).start()
     return jsonify({'job_id': job_id})
 
 
 @app.route('/status-relatorio/<job_id>', methods=['GET'])
 def status_relatorio(job_id):
-    job = _jobs.get(job_id)
+    job = _job_get(job_id)
     if not job:
         return jsonify({'status': 'nao_encontrado'}), 404
     return jsonify({'status': job['status'], 'erro': job.get('erro')})
@@ -986,10 +1009,10 @@ def status_relatorio(job_id):
 
 @app.route('/download-relatorio/<job_id>', methods=['GET'])
 def download_relatorio(job_id):
-    print(f"📥 [DOWNLOAD] job_id={job_id} | jobs disponíveis: {list(_jobs.keys())}")
-    job = _jobs.get(job_id)
+    print(f"📥 [DOWNLOAD] job_id={job_id}")
+    job = _job_get(job_id)
     if not job:
-        print(f"❌ [DOWNLOAD] job_id={job_id} NÃO encontrado em _jobs")
+        print(f"❌ [DOWNLOAD] job_id={job_id} NÃO encontrado em /tmp")
         return jsonify({'error': 'Job não encontrado'}), 404
     print(f"📋 [DOWNLOAD] status={job['status']} | arquivo={job.get('arquivo')} | nome={job.get('nome')}")
     if job['status'] != 'pronto' or not job['arquivo']:
@@ -1015,7 +1038,7 @@ def download_relatorio(job_id):
             os.remove(caminho)
         except Exception:
             pass
-        del _jobs[job_id]
+        _job_del(job_id)
         return resp
     except Exception as e:
         traceback.print_exc()
@@ -1236,7 +1259,7 @@ def _gerar_relatorio(job_id, p):
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.csv', prefix='rel_')
             tmp.write(output.getvalue().encode('utf-8-sig'))
             tmp.close()
-            _jobs[job_id] = {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None}
+            _job_set(job_id, {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None})
 
         # ==============================================================
         # 🔴 OPÇÃO 2: PDF (Visual Executivo com Quantidades e Paletes)
@@ -1457,12 +1480,12 @@ def _gerar_relatorio(job_id, p):
             tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.html', prefix='rel_')
             tmp.write(html.encode('utf-8'))
             tmp.close()
-            _jobs[job_id] = {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None}
+            _job_set(job_id, {'status': 'pronto', 'arquivo': tmp.name, 'nome': nome_arquivo, 'erro': None})
 
     except Exception as e:
         traceback.print_exc()
         print(f"❌ Erro ao exportar relatório: {e}")
-        _jobs[job_id] = {'status': 'erro', 'arquivo': None, 'nome': None, 'erro': str(e)}
+        _job_set(job_id, {'status': 'erro', 'arquivo': None, 'nome': None, 'erro': str(e)})
     finally:
         if conn: conn.close()
 
