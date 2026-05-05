@@ -44,18 +44,18 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // --- PERMISSÕES ---
   isAdmin = computed(() => ['ADM', 'TI'].includes(this.usuarioCargo()));
-  
+  isPcp = computed(() => this.usuarioCargo() === 'PCP' || this.isAdmin());
   isComercial   = computed(() => this.usuarioCargo().toUpperCase().includes('COM'));
   isExpedicao   = computed(() => this.usuarioCargo() === 'EXP' || this.isAdmin());
   isVistoriador = computed(() => this.usuarioCargo() === 'VIS' || this.isAdmin());
   isCarregamento = computed(() => this.usuarioCargo() === 'CAR' || this.isAdmin());
   isDer = computed(() => this.usuarioCargo() === 'DER');
-  podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento() || this.isDer());
+  podeVerCarregamento = computed(() => this.isExpedicao() || this.isCarregamento() || this.isDer() || this.isPcp());
 
   isBalanca = computed(() => this.usuarioCargo() === 'BAL' || this.isAdmin());
 
   podeVerMonitoramento = computed(() =>
-    this.isExpedicao() || this.isBalanca() || this.isComercial()
+    this.isExpedicao() || this.isBalanca() || this.isComercial() || this.isPcp()
   );
 
   // Comercial pode agendar mas não vê Painel/Monitoramento/Carregamento
@@ -71,7 +71,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
       const cargo = this.usuarioCargo();
 
-      if (cargo === 'CAR' || cargo === 'DER') {
+      if (cargo === 'CAR' || cargo === 'DER' || cargo === 'PCP') {
         this.view.set('carregamento');
       } else if (cargo === 'EXP' || cargo === 'COM') {
         this.view.set('monitoramento');
@@ -127,7 +127,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.selectedInspection.set(null);
     if (this.isVistoriador()) {
       this.view.set('list');
-    } else if (this.isCarregamento() || this.isDer()) {
+    } else if (this.isCarregamento() || this.isDer() || this.isPcp()) {
       this.view.set('carregamento');
     } else {
       this.view.set('monitoramento'); 

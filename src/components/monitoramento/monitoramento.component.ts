@@ -496,7 +496,7 @@ validarAntesDeSalvar() {
       }
 
       // 🔥 CORREÇÃO AQUI: Lista dos novos status que indicam que o processo já começou/terminou
-      const statusQueExigemAuditoria = ['VISTORIADO', 'CARREGANDO', 'CARREGADO'];
+      const statusQueExigemAuditoria = ['VISTORIADO', 'CARREGANDO', 'CARREGADO', 'CANCELADO'];
 
       // Se o status original estiver na lista acima -> Exige Auditoria
       if (statusQueExigemAuditoria.includes(this.statusOriginalEdicao)) {
