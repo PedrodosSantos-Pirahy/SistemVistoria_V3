@@ -343,17 +343,39 @@
       </div>
 
       <div>
-        <label class="text-[10px] font-black text-gray-500 uppercase">Status</label>
-        <select [ngModel]="relFiltros().status"
-                (ngModelChange)="setRelFiltro('status', $event)"
-                class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-bold focus:outline-none focus:border-[#6b2b1f]/40">
-          <option value="Todas">Todos</option>
-          <option value="AGUARDANDO">Aguardando</option>
-          <option value="VISTORIADO">Vistoriado</option>
-          <option value="CARREGANDO">Carregando</option>
-          <option value="CARREGADO">Carregado</option>
-          <option value="CANCELADO">Cancelado</option>
-        </select>
+        <div class="flex justify-between items-center mb-1">
+          <label class="text-[10px] font-black text-gray-500 uppercase">Status</label>
+          @if (relFiltros().status.length > 0) {
+            <button (click)="limparRelStatus()" class="text-[9px] font-bold text-gray-400 hover:text-red-500 transition-colors uppercase">
+              Limpar seleção
+            </button>
+          }
+        </div>
+        <div class="mt-1 grid grid-cols-2 gap-1.5">
+          @for (st of [
+            { valor: 'PENDENTE',   label: 'Pendente',   cor: 'text-gray-600'   },
+            { valor: 'ATRASADO',   label: 'Atrasado',   cor: 'text-orange-600' },
+            { valor: 'AGUARDANDO', label: 'Aguardando', cor: 'text-amber-600'  },
+            { valor: 'VISTORIADO', label: 'Vistoriado', cor: 'text-blue-600'   },
+            { valor: 'CARREGANDO', label: 'Carregando', cor: 'text-orange-500' },
+            { valor: 'CARREGADO',  label: 'Carregado',  cor: 'text-green-600'  },
+            { valor: 'CANCELADO',  label: 'Cancelado',  cor: 'text-red-600'    }
+          ]; track st.valor) {
+            <label class="flex items-center gap-2 px-3 py-2 rounded-xl border cursor-pointer transition-all select-none"
+                   [ngClass]="relFiltros().status.includes(st.valor)
+                     ? 'bg-[#6b2b1f]/8 border-[#6b2b1f]/30'
+                     : 'bg-gray-50 border-gray-200 hover:border-gray-300'">
+              <input type="checkbox"
+                     [checked]="relFiltros().status.includes(st.valor)"
+                     (change)="toggleRelStatus(st.valor)"
+                     class="accent-[#6b2b1f] w-3.5 h-3.5 cursor-pointer">
+              <span class="text-[11px] font-black uppercase" [class]="st.cor">{{ st.label }}</span>
+            </label>
+          }
+        </div>
+        @if (relFiltros().status.length === 0) {
+          <p class="text-[9px] text-gray-400 font-bold mt-1.5 text-center">Nenhum selecionado = exporta todos</p>
+        }
       </div>
 
       <div>
@@ -440,19 +462,33 @@
               @if (detalhesChecklist()?.status === 'Cancelada' || itemSelecionado()?.vistoria_realizada === 'CANCELADO') {
                   <section class="bg-red-50 border-l-4 border-red-600 p-6 rounded-r-xl shadow-sm mb-6">
                       <div class="flex items-start gap-4">
-                          <div class="bg-red-100 p-3 rounded-full text-red-600 text-2xl">🚫</div>
-                          <div class="w-full">
-                              <h3 class="text-red-800 font-black uppercase text-lg mb-1">Vistoria Cancelada</h3>
-                              <p class="text-red-600 text-sm font-bold mb-4">Esta vistoria não foi concluída.</p>
-                              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white/50 p-4 rounded-lg border border-red-100">
-                                   <div>
-                                      <label class="text-[9px] font-black text-red-400 uppercase">Cancelado Por</label>
-                                      <p class="text-red-900 font-bold">{{ detalhesChecklist()?.responsavel || itemSelecionado()?.vistoriador }}</p>
+                          <div class="bg-red-100 p-3 rounded-full text-red-600 text-2xl shrink-0">🚫</div>
+                          <div class="w-full space-y-4">
+                              <div>
+                                  <h3 class="text-red-800 font-black uppercase text-lg mb-1">Vistoria Cancelada</h3>
+                                  <p class="text-red-500 text-xs font-bold uppercase tracking-wide">Esta vistoria não foi concluída.</p>
+                              </div>
+
+                              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div class="bg-white/60 p-3 rounded-lg border border-red-100">
+                                      <label class="text-[9px] font-black text-red-400 uppercase block mb-1">Cancelado Por</label>
+                                      <p class="text-red-900 font-bold text-sm">{{ detalhesChecklist()?.responsavel || itemSelecionado()?.vistoriador || '—' }}</p>
                                   </div>
-                                  <div>
-                                      <label class="text-[9px] font-black text-red-400 uppercase">Motivo</label>
-                                      <p class="text-red-900 italic">"{{ detalhesChecklist()?.observacoes }}"</p>
+                                  <div class="bg-white/60 p-3 rounded-lg border border-red-100">
+                                      <label class="text-[9px] font-black text-red-400 uppercase block mb-1">Data do Cancelamento</label>
+                                      <p class="text-red-900 font-bold text-sm">{{ detalhesChecklist()?.data_finalizacao || itemSelecionado()?.data || '—' }}</p>
                                   </div>
+                              </div>
+
+                              <div class="bg-white p-4 rounded-xl border-2 border-red-200">
+                                  <label class="text-[9px] font-black text-red-500 uppercase tracking-widest block mb-2">Justificativa do Cancelamento</label>
+                                  @if (detalhesChecklist()?.observacoes && detalhesChecklist()?.observacoes !== 'Sem observações.') {
+                                      <p class="text-red-900 text-sm font-medium leading-relaxed italic">
+                                          "{{ detalhesChecklist()?.observacoes }}"
+                                      </p>
+                                  } @else {
+                                      <p class="text-red-300 text-xs font-bold italic">Nenhuma justificativa registrada.</p>
+                                  }
                               </div>
                           </div>
                       </div>
@@ -785,14 +821,10 @@
             </div>
 
             <div>
-                <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1">Duração Estimada</label>
-                <select [ngModel]="formEdicao().duracao" (ngModelChange)="updateEdicao('duracao', $event)"
-                        class="w-full border border-gray-300 rounded-lg p-3 text-sm font-bold bg-white text-[#6b2b1f] outline-none">
-                    <option [ngValue]="15">15 min (Rápida)</option>
-                    <option [ngValue]="30">30 min (Padrão)</option>
-                    <option [ngValue]="45">45 min (Longa)</option>
-                    <option [ngValue]="60">60 min (Completa)</option>
-                </select>
+                <label class="block text-[9px] font-bold text-gray-400 uppercase mb-1.5">Duração Estimada</label>
+                <div class="w-full bg-gray-50 border border-gray-200 rounded-lg p-3 font-bold text-sm text-[#6b2b1f]">
+                    15 minutos
+                </div>
             </div>
         </div>
 
@@ -849,22 +881,20 @@
                        class="border border-gray-200 rounded px-2 py-1 text-xs font-bold text-gray-600 outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all">
             </div>
             
-            <div class="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-8 gap-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
+            <div class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-7 gap-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
                 @for (slot of slotsVisuais(); track slot.time) {
                     <button (click)="selecionarHorario(slot.time)"
-                        [disabled]="slot.load >= 3 || slot.isPast"
-                        class="relative p-2 rounded-lg border transition-all flex flex-col items-center gap-1"
+                        [disabled]="slot.load >= 1 || slot.isPast"
+                        class="relative p-3 rounded-xl border transition-all flex flex-col items-center gap-1"
                         [ngClass]="{
-                            'bg-white border-gray-200 hover:border-amber-500 hover:shadow-md': slot.load < 3 && !slot.isPast && formEdicao().hora !== slot.time,
-                            'bg-gray-100 opacity-40 cursor-not-allowed': slot.load >= 3 || slot.isPast,
+                            'bg-white border-gray-200 hover:border-amber-500 hover:shadow-md': slot.load < 1 && !slot.isPast && formEdicao().hora !== slot.time,
+                            'bg-gray-100 opacity-40 cursor-not-allowed': slot.load >= 1 || slot.isPast,
                             'bg-amber-500 text-white border-amber-600 shadow-md transform scale-105': formEdicao().hora === slot.time
                         }">
-                        <span class="text-xs font-black tracking-tight">{{ slot.time }}</span>
+                        <span class="text-sm font-black tracking-tight">{{ slot.time }}</span>
                         <div class="flex gap-0.5">
-                            @for (v of [1,2,3]; track v) {
-                                <div [class]="v <= slot.load ? 'bg-red-400' : (formEdicao().hora === slot.time ? 'bg-white/50' : 'bg-green-400')"
-                                     class="w-1.5 h-1.5 rounded-full"></div>
-                            }
+                            <div [class]="slot.load >= 1 ? 'bg-red-400' : (formEdicao().hora === slot.time ? 'bg-white/50' : 'bg-green-400')"
+                                 class="w-2 h-2 rounded-full"></div>
                         </div>
                     </button>
                 }

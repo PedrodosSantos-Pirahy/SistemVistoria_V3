@@ -9,6 +9,7 @@ interface IntervaloOcupado {
   inicio: string;
   fim: string;
   id: string;
+  derivado: boolean;
 }
 
 @Component({
@@ -75,9 +76,9 @@ pdfUrlSegura = computed(() => {
   transpEncontrada = signal<string | null>(null);
   validacaoTransp  = signal<'ok' | 'divergencia' | 'buscando' | null>(null);
 
-  formEdicao = signal({ 
-    id: '', placa: '', data: '', hora: '', 
-    duracao: 30, local: '', pre_ordens: ['', '', '', '', ''] 
+  formEdicao = signal({
+    id: '', placa: '', data: '', hora: '',
+    duracao: 15, local: '', pre_ordens: ['', '', '', '', '']
   });
 
 constructor() {
@@ -363,7 +364,7 @@ fecharImagem() {
 
     this.formEdicao.set({
         id: item.id, placa: item.placa, data: dataIso, hora: item.h_inicio,
-        duracao: item.duracao || 30, local: item.local || 'Matriz', pre_ordens: ordensArray
+        duracao: 15, local: item.local || 'Matriz', pre_ordens: ordensArray
     });
 
     // Se o item não tem placa, ativa validação de transportadora
@@ -387,32 +388,47 @@ carregarOcupacoes(data: string, local: string) {
   }
 
   slotsVisuais = computed(() => {
-    const times = [];
     const ocupacoes = this.ocupacoesDoDia();
-    const meuId = this.formEdicao().id; 
+    const meuId = this.formEdicao().id;
     const now = new Date();
     const isToday = this.formEdicao().data === now.toISOString().split('T')[0];
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const comercial = this.isComercial();
 
-    for (let h = 8; h <= 17; h++) {
-      for (let m of ['00', '15', '30', '45']) {
-        const slotTimeStr = `${h.toString().padStart(2, '0')}:${m}`;
-        const slotMin = this.timeToMinutes(slotTimeStr);
-        let isPast = false;
-        if (isToday) { if (h < currentHour || (h === currentHour && Number(m) < currentMinute)) isPast = true; }
-
-        let load = 0;
-        for (const ocupacao of ocupacoes) {
-           if (ocupacao.id === meuId) continue;
-           const inicioMin = this.timeToMinutes(ocupacao.inicio);
-           const fimMin = this.timeToMinutes(ocupacao.fim);
-           if (slotMin >= inicioMin && slotMin < fimMin) load++;
+    const horarios: string[] = [];
+    if (comercial) {
+      for (let h = 8; h <= 17; h++)
+        for (const m of ['00', '15', '30', '45']) {
+          const t = `${h.toString().padStart(2, '0')}:${m}`;
+          if (this.timeToMinutes(t) <= 17 * 60) horarios.push(t);
         }
-        times.push({ time: slotTimeStr, load: load, isPast: isPast });
-      }
+    } else {
+      for (let h = 8; h <= 11; h++)
+        for (const m of ['00', '15', '30', '45']) {
+          if (h === 8 && m === '00') continue;
+          horarios.push(`${h.toString().padStart(2, '0')}:${m}`);
+        }
+      for (let h = 13; h <= 17; h++)
+        for (const m of ['00', '15', '30', '45']) {
+          if (h === 13 && (m === '00' || m === '15')) continue;
+          if (h === 17 && m !== '00') continue;
+          horarios.push(`${h.toString().padStart(2, '0')}:${m}`);
+        }
     }
-    return times;
+
+    return horarios.map(slotTimeStr => {
+      const slotMin = this.timeToMinutes(slotTimeStr);
+      const isPast = isToday && slotMin < currentMin;
+      let load = 0;
+      for (const ocupacao of ocupacoes) {
+        if (ocupacao.id === meuId) continue;
+        if (ocupacao.derivado !== comercial) continue;
+        const inicioMin = this.timeToMinutes(ocupacao.inicio);
+        const fimMin = this.timeToMinutes(ocupacao.fim);
+        if (slotMin >= inicioMin && slotMin < fimMin) load++;
+      }
+      return { time: slotTimeStr, load, isPast };
+    });
   });
 
   selecionarHorario(time: string) { this.formEdicao.update((v: any) => ({ ...v, hora: time })); }
@@ -569,7 +585,7 @@ validarAntesDeSalvar() {
   relFiltros = signal({
     inicio: this.getDataHoje(),
     fim: this.getDataHoje(),
-    status: 'Todas',
+    status: [] as string[],
     local: 'Qualquer',
     derivado: 'Todas',
     transportadora: '',
@@ -584,6 +600,19 @@ validarAntesDeSalvar() {
     this.relFiltros.update((f: any) => ({ ...f, [campo]: valor }));
   }
 
+  limparRelStatus() {
+    this.relFiltros.update((f: any) => ({ ...f, status: [] }));
+  }
+
+  toggleRelStatus(s: string) {
+    this.relFiltros.update((f: any) => {
+      const lista: string[] = f.status.includes(s)
+        ? f.status.filter((x: string) => x !== s)
+        : [...f.status, s];
+      return { ...f, status: lista };
+    });
+  }
+
   private _pollInterval: any = null;
 
   exportarRelatorio() {
@@ -591,7 +620,9 @@ validarAntesDeSalvar() {
     if (!f.inicio || !f.fim) { alert('Informe as datas de início e fim.'); return; }
     this.exportando.set(true);
 
-    this.apiService.iniciarExportacao(f).subscribe({
+    const payload = { ...f, status: f.status.length > 0 ? f.status.join(',') : 'Todas' };
+
+    this.apiService.iniciarExportacao(payload).subscribe({
       next: (res) => {
         const jobId = res.job_id;
         this._pollInterval = setInterval(() => {

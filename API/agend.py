@@ -23,7 +23,8 @@ app = Flask(__name__)#, template_folder=pasta_atual)
 
 # Controle de jobs de exportação em background
 def _job_path(job_id):
-    return f'/tmp/rel_job_{job_id}.json'
+    import tempfile
+    return os.path.join(tempfile.gettempdir(), f'rel_job_{job_id}.json')
 
 def _job_set(job_id, data):
     import json as _json
