@@ -773,6 +773,7 @@ def get_detalhes_vistoria(id_agendamento):
 
         # Se não achou produto no ERP, tenta usar o manual da vistoria (row[18])
         produto_final = " / ".join(produtos_reais) if produtos_reais else (row[18] or "-")
+        dados_emitidos.sort(key=lambda x: x['pre_ordem'])
 
         # --- RETORNO JSON ---
         return jsonify({

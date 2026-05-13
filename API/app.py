@@ -23,7 +23,8 @@ app = Flask(__name__)#, template_folder=pasta_atual)
 
 # Controle de jobs de exportação em background
 def _job_path(job_id):
-    return f'/tmp/rel_job_{job_id}.json'
+    import tempfile
+    return os.path.join(tempfile.gettempdir(), f'rel_job_{job_id}.json')
 
 def _job_set(job_id, data):
     import json as _json
@@ -1075,11 +1076,16 @@ def _gerar_relatorio(job_id, p):
         params_query = [data_inicio, data_fim]
 
         if status != 'Todas':
-            if status == 'AGUARDANDO':
-                where_parts.append("(a.status_patio IN ('PENDENTE', 'ATRASADO') OR a.status_patio IS NULL)")
-            else:
-                where_parts.append("a.status_patio = %s")
-                params_query.append(status)
+            status_lista = [s.strip() for s in status.split(',') if s.strip()]
+            partes_status = []
+            for s in status_lista:
+                if s == 'AGUARDANDO':
+                    partes_status.append("(a.status_patio IN ('PENDENTE', 'ATRASADO') OR a.status_patio IS NULL)")
+                else:
+                    partes_status.append("a.status_patio = %s")
+                    params_query.append(s)
+            if partes_status:
+                where_parts.append("(" + " OR ".join(partes_status) + ")")
 
         if local != 'Qualquer':
             where_parts.append("UPPER(TRIM(a.local)) = UPPER(TRIM(%s))")
@@ -1451,13 +1457,28 @@ def _gerar_relatorio(job_id, p):
                 else:
                     html_produtos = "<span style='color: #a0aec0;'>Aguardando ERP...</span>"
                 
+                motivo_cancelamento = row[20] or ""
+
                 cor_status = "bg-pendente"
                 if status_patio == 'VISTORIADO': cor_status = "bg-vistoriado"
                 elif status_patio == 'CARREGANDO': cor_status = "bg-carregando"
                 elif status_patio == 'CARREGADO': cor_status = "bg-carregado"
                 elif status_patio == 'CANCELADO': cor_status = "bg-cancelado"
-                
-                html += f"""
+
+                if status_patio == 'CANCELADO':
+                    html += f"""
+                    <tr>
+                        <td class="bold-dark">{hora_inicio}</td>
+                        <td class="bold-dark">{placa}</td>
+                        <td>{transportadora}</td>
+                        <td style="color: #2b6cb0; font-weight: bold;">{po_str}</td>
+                        <td colspan="2" style="color: #c53030; font-style: italic; font-size: 9px;">{motivo_cancelamento or "Motivo não informado"}</td>
+                        <td><span class='status {cor_status}'>{status_patio}</span></td>
+                        <td>{html_produtos}</td>
+                    </tr>
+                """
+                else:
+                    html += f"""
                     <tr>
                         <td class="bold-dark">{hora_inicio}</td>
                         <td class="bold-dark">{placa}</td>

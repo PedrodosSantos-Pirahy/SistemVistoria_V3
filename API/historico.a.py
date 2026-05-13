@@ -728,19 +728,21 @@ def get_detalhes_vistoria(id_agendamento):
             for po in lista_pre_ordens:
                 if po not in processados_po:
                     dados_emitidos.append({
-                        "pre_ordem": po, 
-                        "pedido": "-", 
-                        "embarque": "-", 
+                        "pre_ordem": po,
+                        "pedido": "-",
+                        "embarque": "-",
                         "notas": "-"
                     })
 
+            dados_emitidos.sort(key=lambda x: (int(x["pre_ordem"]) if x["pre_ordem"].isdigit() else float('inf'), x["pre_ordem"]))
+
             # 2. Busca Produtos e Paletes (Agrupados)
             cur.execute("""
-                                    SELECT 
-                            z."PRD_DESC_RES", 
-                            SUM(y."PED_QUANT") as quantidade_total, 
+                                    SELECT
+                            z."PRD_DESC_RES",
+                            SUM(y."PED_QUANT") as quantidade_total,
                             z."PRD_UNID",
-                            CASE 
+                            CASE
                                 -- Se for MINI ou BAT (ou nulo), prioriza o valor de PLT_DESC_TIPO
                                 WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
                                 -- Se não for um dos acima, verifica a regra do CHEP na tabela de pessoas
@@ -755,17 +757,17 @@ def get_detalhes_vistoria(id_agendamento):
                         LEFT JOIN "UPESSOAS" u ON x."PED_PESSOA" = u."PES_CODIGO" AND u."PES_EMPRESA" = x."PED_EMPRESA"
                         WHERE x."PED_PRE_ORDEM" IN %s
                         -- O GROUP BY leva o CASE inteiro!
-                        GROUP BY 
-                            z."PRD_DESC_RES", 
-                            z."PRD_UNID", 
-                            CASE 
+                        GROUP BY
+                            z."PRD_DESC_RES",
+                            z."PRD_UNID",
+                            CASE
                                 WHEN COALESCE(s."PLT_DESC_TIPO", 'BAT') IN ('MINI', 'BAT') THEN COALESCE(s."PLT_DESC_TIPO", 'BAT')
                                 WHEN u."PES_TP_PALET" IN ('CHEP', 'CHEPc') THEN u."PES_TP_PALET"
                                 ELSE COALESCE(s."PLT_DESC_TIPO", 'BAT')
                             END
                         ORDER BY quantidade_total DESC;
             """, (tuple(lista_pre_ordens),))
-            
+
             for prd_nome, qtd, unid, palete in cur.fetchall():
                 unid_fmt = "FD" if str(unid).strip().upper() == 'FD' else str(unid).strip()
                 # 🔥 A MÁGICA AQUI: O palete agora é concatenado direto no texto final!
