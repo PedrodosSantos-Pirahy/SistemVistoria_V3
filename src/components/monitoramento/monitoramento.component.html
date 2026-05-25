@@ -789,10 +789,17 @@
                 (ngModelChange)="updatePlacaEdicao($event)"
                 maxlength="8"
                 placeholder="AAA-0000"
+                [disabled]="!isTI() && ['VISTORIADO','CARREGANDO','CARREGADO','CANCELADO'].includes(statusOriginalEdicao)"
                 [class.border-red-400]="validacaoTransp() === 'divergencia'"
                 [class.border-green-400]="validacaoTransp() === 'ok'"
+                [class.bg-gray-200]="!isTI() && ['VISTORIADO','CARREGANDO','CARREGADO','CANCELADO'].includes(statusOriginalEdicao)"
+                [class.cursor-not-allowed]="!isTI() && ['VISTORIADO','CARREGANDO','CARREGADO','CANCELADO'].includes(statusOriginalEdicao)"
+                [class.opacity-60]="!isTI() && ['VISTORIADO','CARREGANDO','CARREGADO','CANCELADO'].includes(statusOriginalEdicao)"
                 class="w-full border border-gray-300 rounded-lg p-3 text-sm font-black uppercase text-gray-700 bg-gray-50 outline-none focus:border-amber-500 transition-colors">
 
+                @if (!isTI() && ['VISTORIADO','CARREGANDO','CARREGADO','CANCELADO'].includes(statusOriginalEdicao)) {
+                  <p class="mt-1.5 text-[9px] font-bold text-red-500 uppercase">🔒 Placa bloqueada — vistoria já realizada. Solicite à TI para alterar.</p>
+                }
                 @if (transpEsperada()) {
                   <div class="mt-1.5 text-[9px] font-bold space-y-0.5">
                     <p class="text-gray-400 uppercase">Transportadora esperada: <span class="text-gray-700">{{ transpEsperada() }}</span></p>
