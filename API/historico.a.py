@@ -58,6 +58,25 @@ def log_request_info():
         response.headers.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         return response
 
+def _buscar_pdf_ficha_por_preordens(cur, lista_pre_ordens):
+    """Retorna o PDF da ficha de embarque (bytes) a partir das pré-ordens, ou None se não encontrado."""
+    if not lista_pre_ordens:
+        return None
+    cur.execute("""
+        SELECT e."FE_PDF"
+        FROM "APEDIDOS" a
+        LEFT JOIN "AEMBARITE" b ON a."PED_NUMERO" = b."EMB_PEDIDO" AND a."PED_EMPRESA" = b."EMB_EMPRESA"
+        LEFT JOIN "AMOVPRI" c ON c."MV_PEDIDO" = a."PED_NUMERO"
+        LEFT JOIN "AEMBFICHA_E" d ON b."EMB_NUMERO" = d."FEE_EMBARQUE"
+        LEFT JOIN "AEMBFICHA" e ON d."FEE_ID" = e."FE_ID"
+        WHERE a."PED_PRE_ORDEM" IN %s
+          AND e."FE_PDF" IS NOT NULL
+        LIMIT 1
+    """, (tuple(lista_pre_ordens),))
+    row = cur.fetchone()
+    return bytes(row[0]) if row else None
+
+
 @app.get("/historico")
 def get_historico():
     conn = None
@@ -665,26 +684,15 @@ def get_detalhes_vistoria(id_agendamento):
         is_derivado = bool(row[41])
         tem_pdf_embarque = False
         data_iso = row[2].strftime('%Y-%m-%d') if row[2] else None # Formatamos para YYYY-MM-DD
-        
-        if not is_derivado and row[1] and row[2]:
-            # Placa sem traço para o ERP (Ex: Mercosul ou Antiga)
-            placa_limpa = str(row[1]).replace('-', '').upper().strip() 
+
+        # Índices 5-9 = pre_ordem1..5 do SELECT
+        lista_pre_ordens = [str(row[i]).strip() for i in range(5, 10) if row[i] and str(row[i]).strip()]
+
+        if not is_derivado and lista_pre_ordens:
             try:
-                # Verifica sobre a ficha
-                cur.execute('SELECT 1 FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s AND "FE_PDF" IS NOT NULL LIMIT 1', (placa_limpa, row[2]))
-                if cur.fetchone():
-                    tem_pdf_embarque = True
+                tem_pdf_embarque = _buscar_pdf_ficha_por_preordens(cur, lista_pre_ordens) is not None
             except Exception as e:
                 print(f"⚠️ Aviso Silencioso - Erro ao buscar AEMBFICHA: {e}")
-                
-    
-
-        # --- PROCESSAMENTO DAS PRÉ-ORDENS (VINDAS DO AGENDAMENTO) ---
-        lista_pre_ordens = []
-        # Índices 5, 6, 7, 8, 9 correspondem a pre_ordem1...5 do SELECT acima
-        for i in range(5, 10): 
-            if row[i] and str(row[i]).strip():
-                lista_pre_ordens.append(str(row[i]).strip())
 
         # --- BUSCA DADOS FISCAIS NO ERP ---
         dados_emitidos = []
@@ -1257,40 +1265,32 @@ def dashboard_carga():
 
 @app.route('/pdf-embarque', methods=['GET'])
 def get_pdf_embarque_erp():
-    # 1. Pegamos apenas a placa e a data
-    placa = request.args.get('placa', '').replace('-', '').upper().strip()
-    data = request.args.get('data', '') 
-    
+    id_agend = request.args.get('id', '').strip()
+    if not id_agend:
+        return jsonify({"error": "Parâmetro 'id' obrigatório"}), 400
+
     conn = None
     try:
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
-        
-        cur.execute('SELECT "FE_PDF" FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s', (placa, data))
-        rows = cur.fetchall()
-        
-        if not rows:
+
+        cur.execute("""
+            SELECT pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5
+            FROM "vistoria"."VAGENDAMENTO" WHERE id = %s
+        """, (id_agend,))
+        agend = cur.fetchone()
+        if not agend:
+            return jsonify({"error": "Agendamento não encontrado"}), 404
+
+        lista_pre_ordens = [str(p).strip() for p in agend if p and str(p).strip()]
+        pdf_bytes = _buscar_pdf_ficha_por_preordens(cur, lista_pre_ordens)
+
+        if not pdf_bytes:
             return jsonify({"error": "PDFs da Ordem de Embarque não encontrados"}), 404
 
-        # 2. Se tiver apenas 1 PDF, extrai os bytes, senão usa o Grampeador (PdfWriter)
-        if len(rows) == 1 and rows[0][0]:
-            pdf_bytes = bytes(rows[0][0])
-        else:
-            writer = PdfWriter() 
-            for row in rows:
-                if row[0]: 
-                    pdf_io = io.BytesIO(row[0]) 
-                    writer.append(pdf_io)       
-
-            output_pdf = io.BytesIO()
-            writer.write(output_pdf) 
-            writer.close()           
-            pdf_bytes = output_pdf.getvalue()
-
-        # 3. DEVOLVE O PDF PARA A TELA (Navegador do PC ou Celular resolve o resto!)
         response = make_response(pdf_bytes)
         response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'inline; filename=Embarques_{placa}.pdf'
+        response.headers['Content-Disposition'] = f'inline; filename=Embarques_{id_agend}.pdf'
         return response
 
     except Exception as e:
@@ -1326,43 +1326,46 @@ def listar_impressoras():
 def imprimir_direto():
     dados = request.json
     id_agend = dados.get('id')
-    placa = dados.get('placa', '').replace('-', '').upper().strip()
-    data = dados.get('data', '')
     impressora = dados.get('impressora', '')
 
-    if not placa or not data or not impressora:
-        return jsonify({"error": "Faltam dados (placa, data ou impressora)"}), 400
+    if not id_agend or not impressora:
+        return jsonify({"error": "Faltam dados (id ou impressora)"}), 400
 
     conn = None
     try:
         conn = psycopg2.connect(**DB_BUSCA)
         cur = conn.cursor()
-        
-        # 1. Pega o PDF do ERP
-        cur.execute('SELECT "FE_PDF" FROM agr."AEMBFICHA" WHERE "FE_PLACA" = %s AND "FE_DATA" = %s', (placa, data))
-        rows = cur.fetchall()
 
-        if not rows:
+        # 1. Busca pré-ordens e localiza a ficha correta via AEMBFICHA_E
+        cur.execute("""
+            SELECT pre_ordem1, pre_ordem2, pre_ordem3, pre_ordem4, pre_ordem5
+            FROM "vistoria"."VAGENDAMENTO" WHERE id = %s
+        """, (id_agend,))
+        agend = cur.fetchone()
+        if not agend:
+            return jsonify({"error": "Agendamento não encontrado no sistema"}), 404
+
+        lista_pre_ordens = [str(p).strip() for p in agend if p and str(p).strip()]
+        pdf_bytes = _buscar_pdf_ficha_por_preordens(cur, lista_pre_ordens)
+
+        if not pdf_bytes:
             return jsonify({"error": "Ficha não encontrada no ERP"}), 404
 
-        # 2. Usa a nossa velha e confiável "Tesoura Digital" (A4 Perfeito)
-        
+        # 2. "Tesoura Digital" — escala para A4 perfeito
         writer = PdfWriter()
         A4_W, A4_H = 595.28, 841.89
 
-        for row in rows:
-            if row[0]:
-                reader = PdfReader(io.BytesIO(row[0]))
-                for page in reader.pages:
-                    orig_w = float(page.mediabox.width)
-                    orig_h = float(page.mediabox.height)
-                    scale = min(A4_W / orig_w, A4_H / orig_h)
-                    page.scale_by(scale)
-                    page.mediabox.lower_left = (0, 0)
-                    page.mediabox.upper_right = (A4_W, A4_H)
-                    page.cropbox.lower_left = (0, 0)
-                    page.cropbox.upper_right = (A4_W, A4_H)
-                    writer.add_page(page)
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            orig_w = float(page.mediabox.width)
+            orig_h = float(page.mediabox.height)
+            scale = min(A4_W / orig_w, A4_H / orig_h)
+            page.scale_by(scale)
+            page.mediabox.lower_left = (0, 0)
+            page.mediabox.upper_right = (A4_W, A4_H)
+            page.cropbox.lower_left = (0, 0)
+            page.cropbox.upper_right = (A4_W, A4_H)
+            writer.add_page(page)
 
         # 3. Cria um Arquivo Temporário no Linux para a impressora poder ler
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:

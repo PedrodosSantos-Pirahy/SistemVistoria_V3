@@ -66,12 +66,12 @@ if __name__ == "__main__":
 
     # --- EXEMPLO 2: Vistoriador da FILIAL ---
     criar_usuario(
-        nome="Carregamento Matriz",
-        usuario="c.matriz",
-        senha_plana="12345",
-        cargo="CAR",
-        local="Matriz",
-        matricula="0000"
+        nome="Eduardo Goncalves",
+        usuario="EDUARDOL",
+        senha_plana="6027",
+        cargo="TI",
+        local="",
+        matricula="6027"
     )
     
 

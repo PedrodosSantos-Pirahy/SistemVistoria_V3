@@ -42,11 +42,12 @@
 - O serviço `app.service.ts` envia `status` como string única via `HttpParams` — múltiplos valores são `join(',')` no componente antes de enviar.
 
 #### Regras de Bloqueio no Modal de Edição (`monitoramento.component.html`)
-- **Campo Placa:** bloqueado (disabled + visual cinza) quando `statusOriginalEdicao()` for VISTORIADO, CARREGANDO, CARREGADO ou CANCELADO, **exceto para `isTI() === true`** (cargos TI e ADM).
+- **Campo Placa:** bloqueado (disabled + visual cinza) quando `statusOriginalEdicao` for VISTORIADO, CARREGANDO, CARREGADO ou CANCELADO, **exceto para `isTI() === true`** (cargos TI e ADM).
   - Exibe mensagem `"🔒 Placa bloqueada — vistoria já realizada. Solicite à TI para alterar."` para usuários sem permissão.
   - Motivo: usuários alteravam a placa após a vistoria para evitar refazer o processo.
 - **Campo Data:** já era bloqueado para os mesmos status (comportamento anterior mantido).
 - O signal `isTI` (linha 52 do `.ts`) já identifica TI/ADM e é o ponto central de controle de permissões elevadas.
+- **ATENÇÃO — Armadilha de tipo:** `statusOriginalEdicao` no `.ts` é uma **string simples** (`statusOriginalEdicao = ''`), NÃO um signal. No template HTML, usar `statusOriginalEdicao` **sem parênteses**. Usar `statusOriginalEdicao()` causa erro de JS e impede o modal de renderizar completamente, quebrando a visualização para todos os cargos.
 
 ### PDF de Vistoria Individual (`API/vistoria_pdf.html`)
 - `status_final == 'Sim'` → LIBERADO (verde); qualquer outro valor → REPROVADO (vermelho).
