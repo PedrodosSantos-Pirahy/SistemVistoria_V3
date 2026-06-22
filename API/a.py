@@ -411,12 +411,13 @@ def monitoramento_excel():
                 a.data,
                 a.hr_inicio,
                 COALESCE(a.status_patio, 'PENDENTE'),
-                COALESCE(a.criado_por, 'Desconhecido')
+                COALESCE(a.criado_por, 'Desconhecido'),
+                r.vistoria_fim::TIME
 
             FROM "vistoria"."VAGENDAMENTO" a
             LEFT JOIN "vistoria"."VRESPOSTAS" r ON CAST(r.id_agend AS VARCHAR) = CAST(a.id AS VARCHAR)
             {where_final}
-            ORDER BY 
+            ORDER BY
                 COALESCE(r.vistoria_inicio, CAST(a.data AS TIMESTAMP) + a.hr_inicio) DESC,
                 COALESCE(r.vistoria_fim, CAST(a.data AS TIMESTAMP) + a.hr_fim) DESC
             LIMIT %s OFFSET %s
@@ -512,37 +513,38 @@ def monitoramento_excel():
 
             id_agend = r[0]
             placa_limpa = r[1].upper().replace("-", "").strip() if r[1] else ""
-            status_resposta = r[7] 
+            status_resposta = r[7]
             data_agend = r[19]
             hr_inicio = r[20]
-            status_salvo_banco = r[21] 
-            
+            status_salvo_banco = r[21]
+            vistoria_fim_time = r[22]
+
             # Define a transportadora: Usa a gravada ou o Cache Rápido
             transp = r[6] or transp_cache.get(placa_limpa) or vtranstemp_cache.get(id_agend) or 'Aguardando...'
-            
+
             novo_status = status_salvo_banco
             data_erp = data_agend.strftime('%d/%m/%Y') if data_agend else ""
             cache_key = f"{placa_limpa}_{data_erp}"
 
-            if status_salvo_banco not in ['CARREGADO', 'CANCELADO']:
+            if status_salvo_banco not in ['CANCELADO']:
                 if status_resposta == 'Cancelada':
                     novo_status = 'CANCELADO'
                 elif status_resposta == 'Concluida':
                     if status_salvo_banco in ['PENDENTE', 'ATRASADO']:
                         novo_status = 'VISTORIADO'
-                    
-                    if novo_status == 'VISTORIADO':
-                        hora_agendamento = hr_inicio if hr_inicio else datetime.min.time()
-                        # Consulta o Cache na memória em vez do Banco de Dados!
-                        if cache_key in patio_cache:
-                            horas_validas = [h for h in patio_cache[cache_key] if h >= hora_agendamento]
-                            if horas_validas:
-                                novo_status = 'CARREGANDO'
 
-                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
-                        # Consulta o Cache de Saída na memória
-                        if cache_key in saida_cache:
-                            novo_status = 'CARREGADO'
+                    if vistoria_fim_time:
+                        if novo_status == 'VISTORIADO':
+                            if cache_key in patio_cache:
+                                horas_validas = [h for h in patio_cache[cache_key] if h >= vistoria_fim_time]
+                                if horas_validas:
+                                    novo_status = 'CARREGANDO'
+
+                        if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                            if cache_key in saida_cache:
+                                saidas_validas = [h for h in saida_cache[cache_key] if h >= vistoria_fim_time]
+                                if saidas_validas:
+                                    novo_status = 'CARREGADO'
                 else:
                     if data_agend and hr_inicio:
                         dt_hr_agendamento = datetime.combine(data_agend, hr_inicio)
@@ -1082,32 +1084,31 @@ def dashboard_carga():
             hora_exibicao = str(hr_inicio)[:5] if hr_inicio else "--:--"
             texto_hora = "Agendado:"
 
-            if status_patio not in ['CARREGADO', 'CANCELADO']:
+            if status_patio not in ['CANCELADO']:
                 if status_resp == 'Cancelada':
                     novo_status = 'CANCELADO'
                 elif status_resp == 'Concluida':
                     if status_patio in ['PENDENTE', 'ATRASADO']:
                         novo_status = 'VISTORIADO'
-                    
-                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
-                        if vistoria_fim:
-                            hora_exibicao = vistoria_fim.strftime('%H:%M')
-                            texto_hora = "Vistoriado:"
 
-                        limite_doca = vistoria_fim.time() if vistoria_fim else hr_inicio
-                        if placa_limpa in patio_cache and limite_doca:
-                            horas_validas = [h for h in patio_cache[placa_limpa] if h >= limite_doca]
-                            if horas_validas:
-                                novo_status = 'CARREGANDO'
-                                hora_exibicao = str(min(horas_validas))[:5] 
-                                texto_hora = "Na Doca:"
+                    if vistoria_fim:
+                        hora_exibicao = vistoria_fim.strftime('%H:%M')
+                        texto_hora = "Vistoriado:"
+                        limite = vistoria_fim.time()
 
-                    if novo_status in ['VISTORIADO', 'CARREGANDO']:
-                        limite_saida = vistoria_fim.time() if vistoria_fim else hr_inicio
-                        if placa_limpa in saida_cache and limite_saida:
-                            saidas_validas = [h for h in saida_cache[placa_limpa] if h >= limite_saida]
-                            if saidas_validas:
-                                novo_status = 'CARREGADO'
+                        if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                            if placa_limpa in patio_cache:
+                                horas_validas = [h for h in patio_cache[placa_limpa] if h >= limite]
+                                if horas_validas:
+                                    novo_status = 'CARREGANDO'
+                                    hora_exibicao = str(min(horas_validas))[:5]
+                                    texto_hora = "Na Doca:"
+
+                        if novo_status in ['VISTORIADO', 'CARREGANDO']:
+                            if placa_limpa in saida_cache:
+                                saidas_validas = [h for h in saida_cache[placa_limpa] if h >= limite]
+                                if saidas_validas:
+                                    novo_status = 'CARREGADO'
                 else:
                     if data_agend and hr_inicio:
                         dt_hr = datetime.combine(data_agend, hr_inicio)
