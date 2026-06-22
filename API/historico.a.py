@@ -517,7 +517,7 @@ def monitoramento_excel():
             data_agend = r[19]
             hr_inicio = r[20]
             status_salvo_banco = r[21]
-            vistoria_fim_time = r[22]
+            vistoria_fim_time = r[23]
             
             # Define a transportadora: Usa a gravada ou o Cache Rápido
             transp = r[6] or transp_cache.get(placa_limpa) or vtranstemp_cache.get(id_agend) or 'Aguardando...'
